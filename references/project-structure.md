@@ -37,15 +37,22 @@
 │   ├── pom.xml
 │   └── src/main/java/
 │       └── cn/{company}/infrastructure/
-│           ├── adapter/
-│           │   ├── port/                   # Port 实现（远程调用）
-│           │   │   └── ProductPort.java     # HTTP / RPC / WebSocket
-│           │   └── repository/              # Repository 实现（本地数据）
-│           │       └── OrderRepository.java # MySQL + Redis
-│           ├── dao/                        # DAO 接口（MyBatis Mapper）
-│           ├── dataobject/                 # PO 类
-│           ├── gateway/                    # 外部服务客户端
-│           └── config/                     # 配置类
+│           ├── adapter/                        # ⭐ 适配器实现
+│           │   ├── port/                       # Port 实现（远程调用）
+│           │   │   └── XxxPort.java           # HTTP / RPC / WebSocket
+│           │   └── repository/                 # Repository 实现（本地数据）
+│           │       └── XxxRepository.java     # MySQL + Redis
+│           ├── dao/                            # ⭐ MyBatis DAO 接口
+│           │   ├── po/                         # ⭐ PO 对象（数据库映射）
+│           │   │   └── XxxPO.java
+│           │   └── IXxxDao.java
+│           ├── gateway/                       # ⭐ HTTP/RPC 客户端
+│           │   ├── dto/                        # ⭐ 远程调用 DTO
+│           │   │   ├── XxxRequestDTO.java
+│           │   │   └── XxxResponseDTO.java
+│           │   └── XxxGateway.java             # HTTP 服务客户端
+│           ├── redis/                         # Redis 配置
+│           └── config/                        # 配置类
 │
 ├── {project}-api/                   # API layer
 │   ├── pom.xml
@@ -61,7 +68,9 @@
 │       └── cn/{company}/cases/
 │           └── {domain}/
 │               ├── I{Domain}CaseService.java
-│               └── impl/
+│               ├── impl/
+│               ├── node/            # 复杂流程节点
+│               └── factory/         # 流程工厂
 │
 ├── {project}-trigger/               # Trigger layer
 │   ├── pom.xml
@@ -78,7 +87,89 @@
         │   └── cn/{company}/
         │       └── Application.java
         └── resources/
-            └── application.yml
+            ├── application.yml
+            └── mybatis/                         # ⭐ MyBatis 配置
+                └── mapper/                     # ⭐ Mapper XML 文件
+                    └── xxx_mapper.xml
+```
+
+## Infrastructure 层职责
+
+| 目录 | 职责 | 技术栈 |
+|------|------|--------|
+| `adapter/repository/` | 实现 Repository 接口 | MySQL + Redis |
+| `adapter/port/` | 实现 Port 接口 | HTTP + RPC |
+| `dao/` | MyBatis DAO 接口 | MyBatis Mapper |
+| `dao/po/` | PO 对象（数据库映射） | Java Bean |
+| `gateway/` | HTTP/RPC 客户端 | OkHttp / Retrofit |
+| `gateway/dto/` | 远程调用 DTO | JSON 序列化 |
+| `mybatis/mapper/` | Mapper XML 文件 | MyBatis XML |
+
+## DAO 与 PO 规范
+
+### 目录结构
+
+```
+infrastructure/
+└── dao/
+    ├── po/
+    │   ├── UserPO.java
+    │   ├── OrderPO.java
+    │   └── base/           # 基类 PO
+    │       └── BasePO.java
+    └── IUserDao.java
+```
+
+### DAO 接口命名
+
+```
+接口名：I{Xxx}Dao
+示例：IUserDao、IOrderDao、IProductDao
+```
+
+### PO 对象命名
+
+```
+类名：{Xxx}PO
+示例：UserPO、OrderPO、ProductPO
+```
+
+## Gateway 与 DTO 规范
+
+### 目录结构
+
+```
+infrastructure/
+└── gateway/
+    ├── dto/
+    │   ├── UserRequestDTO.java
+    │   └── UserResponseDTO.java
+    └── UserGatewayService.java
+```
+
+### Gateway 命名
+
+```
+服务类：XxxGatewayService
+示例：ProductGatewayService、OrderGatewayService
+DTO：XxxRequestDTO / XxxResponseDTO
+```
+
+## MyBatis Mapper XML 规范
+
+### 存放位置
+
+```
+{project}-app/src/main/resources/mybatis/mapper/
+├── user_mapper.xml
+├── order_mapper.xml
+└── product_mapper.xml
+```
+
+### namespace 规范
+
+```xml
+<mapper namespace="cn.{company}.infrastructure.dao.I{Xxx}Dao">
 ```
 
 ## POM Dependencies
@@ -159,6 +250,10 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+        </dependency>
     </dependencies>
 </project>
 ```
@@ -227,3 +322,8 @@
 2. **Infrastructure implements Domain interfaces**
 3. **Trigger depends on API and Case only**
 4. **All modules depend on Types**
+
+## 参考项目
+
+- [group-buy-market](file:///Users/fuzhengwei/Documents/project/ddd-demo/group-buy-market) - 完整的多模块实现
+- [ai-mcp-gateway](file:///Users/fuzhengwei/Documents/project/ddd-demo/ai-mcp-gateway) - Gateway + DTO 示例
