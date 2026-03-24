@@ -12,13 +12,48 @@ triggers:
   - "ports and adapters"
   - "创建 Entity"
   - "创建聚合根"
+  - "创建 DDD 项目"
+  - "新建项目"
 metadata:
   openclaw:
     emoji: "🏗️"
 ---
+
 # DDD Hexagonal Architecture
 
 Design and implement software using Domain-Driven Design with Hexagonal Architecture. This skill provides patterns, templates, and best practices for building maintainable domain-centric applications.
+
+## Scripts
+
+### 创建 DDD 项目
+
+当用户需要创建新的 DDD 项目时，执行以下脚本：
+
+```bash
+bash /Applications/QClaw.app/Contents/Resources/openclaw/config/skills/ddd/scripts/create-ddd-project.sh
+```
+
+脚本会交互式询问以下配置：
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| GroupId | Maven 坐标的 groupId，用于标识组织或公司 | com.yourcompany |
+| ArtifactId | 项目模块的唯一标识名称 | your-project-name |
+| Version | 项目的版本号 | 1.0.0-SNAPSHOT |
+| Package | Java 代码的根包名 | com.yourcompany.project |
+| Archetype 版本 | 脚手架模板版本 | 1.3 |
+
+> 💡 不提供输入时使用默认值，直接回车即可
+
+**Maven Archetype 命令参数说明：**
+
+| 参数 | 用途 | 示例 |
+|------|------|------|
+| `-DgroupId` | 组织/公司标识，用于 Maven 坐标 | `com.yourcompany` |
+| `-DartifactId` | 项目唯一名称，生成目录名 | `order-system` |
+| `-Dversion` | 版本号 | `1.0.0-SNAPSHOT` |
+| `-Dpackage` | Java 根包名 | `com.yourcompany.order` |
+| `-DarchetypeVersion` | 脚手架模板版本 | `1.3` |
 
 ## Quick Reference
 
@@ -33,8 +68,7 @@ Design and implement software using Domain-Driven Design with Hexagonal Architec
 | Domain Service | [references/domain-service.md](references/domain-service.md) |
 | Case layer orchestration | [references/case-layer.md](references/case-layer.md) |
 | Trigger layer | [references/trigger-layer.md](references/trigger-layer.md) |
-| Domain Service | [references/domain-service.md](references/domain-service.md) |
-| **Infrastructure layer** | [references/infrastructure-layer.md](references/infrastructure-layer.md) |
+| Infrastructure layer | [references/infrastructure-layer.md](references/infrastructure-layer.md) |
 | Project structure | [references/project-structure.md](references/project-structure.md) |
 | Naming conventions | [references/naming.md](references/naming.md) |
 | Docker Images | [references/docker-images.md](references/docker-images.md) |
@@ -54,7 +88,7 @@ Design and implement software using Domain-Driven Design with Hexagonal Architec
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      Case Layer                              │
-│            (Orchestration / Business Flow)                  │
+│            (Orchestration / Business Flow)                   │
 └─────────────────────────┬───────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
@@ -205,11 +239,11 @@ public class NotificationPortImpl implements INotificationPort {
 @RestController
 @RequestMapping("/api/v1/orders/")
 public class OrderController {
-    @Resource private IOrderService orderService;
+    @Resource private IOrderCaseService orderCaseService;
     
     @PostMapping("/create")
     public Response<OrderDTO> create(@RequestBody @Valid CreateOrderRequest request) {
-        return orderService.create(request);
+        return orderCaseService.createOrder(request);
     }
 }
 ```
