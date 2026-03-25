@@ -27,33 +27,47 @@ Design and implement software using Domain-Driven Design with Hexagonal Architec
 
 ### 创建 DDD 项目
 
-当用户需要创建新的 DDD 项目时，执行以下脚本：
+当用户需要创建新的 DDD 项目时，**询问用户以下配置参数**，然后执行 Maven Archetype 命令：
+
+**询问参数：**
+
+| 参数 | 说明 | 默认值 | 示例 |
+|------|------|--------|------|
+| GroupId | Maven 坐标的 groupId，用于标识组织或公司 | `com.yourcompany` | `cn.bugstack` |
+| ArtifactId | 项目模块的唯一标识名称 | `your-project-name` | `order-system` |
+| Version | 项目的版本号 | `1.0.0-SNAPSHOT` | `1.0.0-RELEASE` |
+| Package | Java 代码的根包名（默认同 groupId） | 同 groupId | `cn.bugstack.order` |
+
+> 💡 用户不提供时使用默认值
+
+**Maven Archetype 命令模板：**
 
 ```bash
-bash /Applications/QClaw.app/Contents/Resources/openclaw/config/skills/ddd/scripts/create-ddd-project.sh
+mvn archetype:generate \
+  -DarchetypeGroupId=io.github.fuzhengwei \
+  -DarchetypeArtifactId=ddd-scaffold-lite-jdk17 \
+  -DarchetypeVersion=1.3 \
+  -DarchetypeRepository=https://maven.xiaofuge.cn/ \
+  -DgroupId={用户输入或默认值} \
+  -DartifactId={用户输入或默认值} \
+  -Dversion={用户输入或默认值} \
+  -Dpackage={用户输入或默认值} \
+  -B
 ```
 
-脚本会交互式询问以下配置：
+**参数说明：**
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| GroupId | Maven 坐标的 groupId，用于标识组织或公司 | com.yourcompany |
-| ArtifactId | 项目模块的唯一标识名称 | your-project-name |
-| Version | 项目的版本号 | 1.0.0-SNAPSHOT |
-| Package | Java 代码的根包名 | com.yourcompany.project |
-| Archetype 版本 | 脚手架模板版本 | 1.3 |
-
-> 💡 不提供输入时使用默认值，直接回车即可
-
-**Maven Archetype 命令参数说明：**
-
-| 参数 | 用途 | 示例 |
-|------|------|------|
-| `-DgroupId` | 组织/公司标识，用于 Maven 坐标 | `com.yourcompany` |
-| `-DartifactId` | 项目唯一名称，生成目录名 | `order-system` |
-| `-Dversion` | 版本号 | `1.0.0-SNAPSHOT` |
-| `-Dpackage` | Java 根包名 | `com.yourcompany.order` |
-| `-DarchetypeVersion` | 脚手架模板版本 | `1.3` |
+| 参数 | 用途 |
+|------|------|
+| `-DarchetypeGroupId` | 脚手架模板的 groupId |
+| `-DarchetypeArtifactId` | 脚手架模板名称 |
+| `-DarchetypeVersion` | 脚手架版本 |
+| `-DarchetypeRepository` | Maven 私服地址 |
+| `-DgroupId` | 项目组织标识 |
+| `-DartifactId` | 项目名称 |
+| `-Dversion` | 项目版本 |
+| `-Dpackage` | Java 根包名 |
+| `-B` | 批量模式，不交互 |
 
 ## Quick Reference
 
