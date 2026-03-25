@@ -1,433 +1,350 @@
-# Aggregate Design Reference
+# Aggregate 聚合对象设计规范
 
-## Table of Contents
+## 概述
 
-1. [What is an Aggregate](#1-what-is-an-aggregate)
-2. [Aggregate Root](#2-aggregate-root)
-3. [Design Principles](#3-design-principals)
-4. [Aggregate Template](#4-aggregate-template)
-5. [Transaction Boundary](#5-transaction-boundary)
-6. [Aggregate References](#6-aggregate-references)
-7. [Best Practices](#7-best-practices)
+Aggregate（聚合对象）是 DDD 领域层中用于**封装业务一致性和事务边界**的核心概念。聚合定义了一组相关对象的边界，确保在边界内的对象遵循同一套业务规则。
 
----
-
-## 1. What is an Aggregate
-
-An Aggregate is a cluster of domain objects that:
-- Are treated as a single unit
-- Have a defined consistency boundary
-- Share a common lifecycle
-
-### Visual Representation
+## 目录结构
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Order Aggregate                         │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │              Order (Root Entity)                     │  │
-│  │  - orderId                                          │  │
-│  │  - status                                           │  │
-│  │  - totalAmount                                      │  │
-│  └─────────────────────────────────────────────────────┘  │
-│                          │                                  │
-│                          │ owns                             │
-│                          ▼                                  │
-│  ┌─────────────────┐  ┌─────────────────┐                  │
-│  │  OrderItem 1    │  │  OrderItem 2    │                  │
-│  │  - productId    │  │  - productId    │                  │
-│  │  - quantity     │  │  - quantity     │                  │
-│  │  - price        │  │  - price        │                  │
-│  └─────────────────┘  └─────────────────┘                  │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │           ShippingAddress (Value Object)            │  │
-│  └─────────────────────────────────────────────────────┘  │
-│                                                             │
-│  Transaction Boundary: All saved together atomically       │
-└─────────────────────────────────────────────────────────────┘
+model/
+├── aggregate/              # ⭐ 聚合对象
+│   └── XxxAggregate.java
+├── entity/               # 实体对象
+└── valobj/               # 值对象
 ```
 
----
+## 聚合的定义
 
-## 2. Aggregate Root
+### 什么是聚合？
 
-The Aggregate Root is:
-- The only entry point to the aggregate
-- Responsible for maintaining invariants
-- The entity that external objects reference
+> 聚合是将多个相关对象视为一个单一的单元。聚合根（Aggregate Root）是聚合对外的唯一入口，负责维护聚合内的一致性规则。
 
-### Rules
+### 真实工程示例
 
-1. **Only root has global identity** - Other entities have local identity
-2. **Access only through root** - Cannot modify internal entities directly
-3. **Root maintains consistency** - All invariants checked by root
+参考 `group-buy-market` 项目的 `GroupBuyOrderAggregate`：
 
 ```java
-// ✅ Correct: Access through root
-OrderAggregate order = orderRepository.findById(1L);
-order.addItem(item);  // Root controls addition
+package cn.bugstack.domain.trade.model.aggregate;
 
-// ❌ Wrong: Direct access to internal entity
-OrderItemEntity item = order.getItems().get(0);
-item.setQuantity(100);  // Bypasses root validation
-```
+import cn.bugstack.domain.trade.model.entity.*;
+import lombok.*;
 
----
-
-## 3. Design Principles
-
-### Keep Aggregates Small
-
-```java
-// ❌ Too large - too many objects in one transaction
-OrderAggregate {
-    Order order;
-    List<OrderItem> items;        // 100 items
-    User user;                    // Full user object
-    List<Payment> payments;       // Payment history
-    List<Shipment> shipments;     // Shipment history
-    Address billingAddress;
-    Address shippingAddress;
-}
-
-// ✅ Small - focused on essential data
-OrderAggregate {
-    Order order;                  // Root
-    List<OrderItem> items;        // Current items only
-    ShippingAddressVO address;    // Value object
-    UserIdVO userId;              // Reference to user
-}
-```
-
-### Reference Other Aggregates by Identity
-
-```java
-// ❌ Wrong: Reference by object
-@Data
-public class OrderAggregate {
-    private UserAggregate user;  // Full aggregate
-}
-
-// ✅ Correct: Reference by identity
-@Data
-public class OrderAggregate {
-    private Long userId;         // Just the ID
-    // or
-    private UserIdVO userId;     // Value object with ID
-}
-```
-
----
-
-## 4. Aggregate Template
-
-### Basic Template
-
-```java
 /**
- * {Domain} Aggregate
- * 
- * Consistency boundary for {business concept}.
+ * 拼团订单聚合对象
+ * 聚合可以理解用各个四肢、身体、头等组装出来一个人
+ * @author Fuzhengwei bugstack.cn @小傅哥
  */
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class {Domain}Aggregate {
+public class GroupBuyOrderAggregate {
 
-    /** Root entity */
-    private {Domain}Entity root;
+    /** 用户实体对象 */
+    private UserEntity userEntity;
     
-    /** Related entities */
-    private List<{Item}Entity> items;
+    /** 支付活动实体对象 */
+    private PayActivityEntity payActivityEntity;
     
-    /** Value objects */
-    private {Value}VO valueObject;
+    /** 支付优惠实体对象 */
+    private PayDiscountEntity payDiscountEntity;
+    
+    /** 已参与拼团量 */
+    private Integer userTakeOrderCount;
 
-    // ==================== Root Access ====================
-    
-    public Long getId() {
-        return root != null ? root.getId() : null;
-    }
-    
-    public String getBizId() {
-        return root != null ? root.getBizId() : null;
-    }
-
-    // ==================== Invariants ====================
-    
-    public void validate() {
-        if (root == null) {
-            throw new IllegalArgumentException("Root required");
-        }
-        root.validate();
-    }
-
-    // ==================== Factory Methods ====================
-    
-    public static {Domain}Aggregate create(CreateCommand cmd) {
-        {Domain}Aggregate aggregate = {Domain}Aggregate.builder()
-            .root({Domain}Entity.create(cmd))
-            .items(new ArrayList<>())
-            .build();
-        aggregate.validate();
-        return aggregate;
-    }
 }
 ```
 
-### Complete Example
+## 聚合的特征
+
+### 1. 聚合根是唯一入口
+
+聚合内的其他对象只能通过聚合根访问：
 
 ```java
-@Data
-@Builder
-@AllArgsConstructor
-@NoArgsConstructor
-public class OrderAggregate {
+// ✅ 正确：通过聚合根访问
+GroupBuyOrderAggregate aggregate = repository.findById(orderId);
+UserEntity user = aggregate.getUserEntity(); // 通过聚合根访问
 
-    private OrderEntity order;
-    private List<OrderItemEntity> items;
-    private ShippingAddressVO shippingAddress;
-
-    // ==================== Root Access ====================
-    
-    public Long getOrderId() {
-        return order != null ? order.getId() : null;
-    }
-    
-    public String getOrderNo() {
-        return order != null ? order.getOrderNo() : null;
-    }
-
-    // ==================== Business Operations ====================
-    
-    /**
-     * Create new order
-     */
-    public static OrderAggregate create(String orderNo, Long userId) {
-        OrderAggregate aggregate = OrderAggregate.builder()
-            .order(OrderEntity.builder()
-                .orderNo(orderNo)
-                .userId(userId)
-                .status(OrderStatusEnum.PENDING)
-                .createdAt(LocalDateTime.now())
-                .build())
-            .items(new ArrayList<>())
-            .build();
-        aggregate.validate();
-        return aggregate;
-    }
-    
-    /**
-     * Add item (root controls)
-     */
-    public void addItem(OrderItemEntity item) {
-        // Invariant: Max 100 items
-        if (items.size() >= 100) {
-            throw new BusinessException("Max items reached");
-        }
-        // Invariant: No duplicate products
-        boolean exists = items.stream()
-            .anyMatch(i -> i.getProductId().equals(item.getProductId()));
-        if (exists) {
-            throw new BusinessException("Product already in order");
-        }
-        items.add(item);
-        recalculateTotal();
-    }
-    
-    /**
-     * Remove item
-     */
-    public void removeItem(Long itemId) {
-        items.removeIf(i -> i.getId().equals(itemId));
-        recalculateTotal();
-    }
-    
-    /**
-     * Pay order
-     */
-    public void pay() {
-        if (order.getStatus() != OrderStatusEnum.PENDING) {
-            throw new BusinessException("Only pending orders can be paid");
-        }
-        if (items.isEmpty()) {
-            throw new BusinessException("Cannot pay empty order");
-        }
-        order.pay();
-    }
-    
-    /**
-     * Cancel order
-     */
-    public void cancel(String reason) {
-        if (order.getStatus() == OrderStatusEnum.DELIVERED) {
-            throw new BusinessException("Cannot cancel delivered order");
-        }
-        order.cancel(reason);
-    }
-
-    // ==================== Queries ====================
-    
-    public BigDecimal getTotalAmount() {
-        return order != null ? order.getTotalAmount() : BigDecimal.ZERO;
-    }
-    
-    public int getItemCount() {
-        return items != null ? items.size() : 0;
-    }
-    
-    public boolean canPay() {
-        return order != null && order.canPay() && !items.isEmpty();
-    }
-
-    // ==================== Private Helpers ====================
-    
-    private void recalculateTotal() {
-        BigDecimal total = items.stream()
-            .map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        order.setTotalAmount(total);
-    }
-    
-    private void validate() {
-        if (order == null) {
-            throw new IllegalArgumentException("Order required");
-        }
-        order.validate();
-    }
-}
+// ❌ 错误：直接访问聚合内对象
+UserEntity user = userRepository.findById(userId); // 应该通过聚合
 ```
 
----
+### 2. 事务边界
 
-## 5. Transaction Boundary
-
-### Inside Aggregate: Strong Consistency
-
-```java
-@Repository
-public class OrderRepositoryImpl implements IOrderRepository {
-    
-    @Transactional
-    @Override
-    public void save(OrderAggregate aggregate) {
-        // All these succeed or fail together
-        orderDao.insert(aggregate.getOrder());
-        
-        for (OrderItemEntity item : aggregate.getItems()) {
-            itemDao.insert(item);
-        }
-        
-        if (aggregate.getShippingAddress() != null) {
-            addressDao.insert(aggregate.getShippingAddress());
-        }
-    }
-}
-```
-
-### Between Aggregates: Eventual Consistency
+聚合定义了一个事务边界内的操作：
 
 ```java
 @Service
 public class OrderService {
-    
+
+    @Resource
+    private IOrderRepository repository;
+
     @Transactional
-    public void createOrder(CreateOrderCommand cmd) {
-        // Save order aggregate
-        OrderAggregate order = OrderAggregate.create(cmd);
-        orderRepository.save(order);
+    public void createOrder(Long userId, Long productId) {
+        // 整个操作在一个事务中
+        GroupBuyOrderAggregate aggregate = GroupBuyOrderAggregate.builder()
+                .userEntity(userRepository.findById(userId))
+                .payActivityEntity(activityRepository.findById(productId))
+                .build();
         
-        // Publish event for other aggregates
-        eventPublisher.publish(new OrderCreatedEvent(order.getOrderId()));
-        
-        // Inventory will handle in its own transaction
+        repository.save(aggregate);
     }
 }
 ```
 
----
+### 3. 聚合内对象的一致性
 
-## 6. Aggregate References
-
-### By ID
+聚合根负责维护聚合内的一致性规则：
 
 ```java
 @Data
 public class OrderAggregate {
-    private OrderEntity order;
-    private Long userId;  // Reference to UserAggregate
-}
 
-// Load separately when needed
-OrderAggregate order = orderRepository.findById(orderId);
-UserAggregate user = userRepository.findById(order.getUserId());
+    private OrderEntity order;
+    private List<OrderItemEntity> items;
+    private AddressVO address;
+
+    /**
+     * 计算订单总金额
+     */
+    public BigDecimal calculateTotalAmount() {
+        return items.stream()
+                .map(OrderItemEntity::getPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * 验证订单有效性
+     */
+    public void validate() {
+        if (items.isEmpty()) {
+            throw new IllegalStateException("订单不能为空");
+        }
+        // ... 更多验证
+    }
+}
 ```
 
-### By Value Object
+## 聚合与实体的关系
+
+| 维度 | 聚合 Aggregate | 实体 Entity |
+|------|----------------|-------------|
+| 位置 | `aggregate/` 包 | `entity/` 包 |
+| 职责 | 封装一组相关对象 | 代表单个业务主体 |
+| 标识 | 聚合根有标识 | 有唯一标识 |
+| 访问 | 外部只能访问聚合根 | 外部不能直接访问 |
+| 事务 | 定义事务边界 | 参与聚合的事务 |
+
+## 聚合的使用场景
+
+### 1. 需要保持一致性的对象组
 
 ```java
-@Getter
-public class UserIdVO {
-    private final Long id;
+// 订单及其订单项需要保持一致性
+@Data
+public class OrderAggregate {
+    private OrderEntity order;           // 订单主体
+    private List<OrderItemEntity> items; // 订单项列表
+    private AddressVO address;           // 收货地址
+}
+
+// 只能通过聚合根操作
+@Service
+public class OrderService {
+    public void addItem(Long orderId, OrderItemEntity item) {
+        OrderAggregate aggregate = repository.findById(orderId);
+        aggregate.addItem(item); // 通过聚合根添加
+        repository.save(aggregate);
+    }
+}
+```
+
+### 2. 需要事务边界的操作
+
+```java
+@Transactional
+public void placeOrder(OrderAggregate aggregate) {
+    // 1. 扣减库存（外部系统）
+    inventoryService.deduct(aggregate.getItems());
     
-    public static UserIdVO of(Long id) {
-        return new UserIdVO(id);
+    // 2. 创建订单
+    repository.save(aggregate);
+    
+    // 3. 发送通知（外部系统）
+    notificationService.send(aggregate);
+    
+    // 以上操作在一个事务中
+}
+```
+
+## 真实工程示例
+
+参考 `group-buy-market` 项目：
+
+### GroupBuyOrderAggregate - 订单聚合
+
+```java
+/**
+ * 拼团订单聚合
+ * 包含：用户、活动、优惠、参与次数
+ */
+@Data
+public class GroupBuyOrderAggregate {
+    private UserEntity userEntity;
+    private PayActivityEntity payActivityEntity;
+    private PayDiscountEntity payDiscountEntity;
+    private Integer userTakeOrderCount;
+}
+```
+
+### GroupBuyRefundAggregate - 退款聚合
+
+```java
+/**
+ * 拼团退款聚合
+ */
+@Data
+public class GroupBuyRefundAggregate {
+    
+    private TradeRefundOrderEntity refundOrder;
+    private GroupBuyTeamEntity team;
+    private MarketPayOrderEntity payOrder;
+    private Integer deductStock;
+    private Integer deductComplete;
+    
+    /**
+     * 构建退款聚合
+     */
+    public static GroupBuyRefundAggregate buildPaid2RefundAggregate(
+            TradeRefundOrderEntity entity, Integer deductStock, Integer deductComplete) {
+        return GroupBuyRefundAggregate.builder()
+                .refundOrder(entity)
+                .deductStock(deductStock)
+                .deductComplete(deductComplete)
+                .build();
     }
 }
+```
 
+### GroupBuyTeamSettlementAggregate - 结算聚合
+
+```java
+/**
+ * 拼团结算聚合
+ */
+@Data
+public class GroupBuyTeamSettlementAggregate {
+    private GroupBuyTeamEntity team;
+    private List<MarketPayOrderEntity> orders;
+    private NotifyConfigVO notifyConfig;
+}
+```
+
+## 命名规范
+
+| 类型 | 命名规范 | 示例 |
+|------|---------|------|
+| 聚合 | `XxxAggregate` | `GroupBuyOrderAggregate` |
+
+## 设计原则
+
+### 1. 聚合应该尽量小
+
+```java
+// ✅ 正确：聚合只包含必要的对象
+@Data
+public class OrderAggregate {
+    private OrderEntity order;           // 必需
+    private List<OrderItemEntity> items;  // 必需
+    // 不要把无关的对象放进来
+}
+
+// ❌ 错误：聚合过大
 @Data
 public class OrderAggregate {
     private OrderEntity order;
-    private UserIdVO userId;  // Value object reference
+    private List<OrderItemEntity> items;
+    private AddressVO address;
+    private UserEntity user;           // 应该通过 userId 查询
+    private ProductEntity product;     // 应该通过 productId 查询
+    private WarehouseEntity warehouse; // 无关对象
 }
 ```
 
----
-
-## 7. Best Practices
-
-### Do
+### 2. 聚合根应该有业务方法
 
 ```java
-// ✅ Keep aggregates small
-OrderAggregate { order, items, address }
+@Data
+public class OrderAggregate {
 
-// ✅ Reference by ID
-private Long userId;
+    private OrderEntity order;
+    private List<OrderItemEntity> items;
 
-// ✅ Control through root
-public void addItem(OrderItemEntity item) {
-    validateItem(item);
-    items.add(item);
-}
+    /**
+     * 计算总金额
+     */
+    public BigDecimal totalAmount() {
+        return items.stream()
+                .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 
-// ✅ Maintain invariants
-private void validateItem(OrderItemEntity item) {
-    if (items.size() >= MAX_ITEMS) {
-        throw new BusinessException("Max reached");
+    /**
+     * 添加订单项
+     */
+    public void addItem(OrderItemEntity item) {
+        if (item == null) {
+            throw new IllegalArgumentException("订单项不能为空");
+        }
+        this.items.add(item);
+    }
+
+    /**
+     * 验证订单
+     */
+    public void validate() {
+        if (items.isEmpty()) {
+            throw new IllegalStateException("订单不能为空");
+        }
+        if (order.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException("订单金额必须大于0");
+        }
     }
 }
 ```
 
-### Don't
+### 3. 聚合内对象不应被外部直接引用
 
 ```java
-// ❌ Don't make aggregates too large
-OrderAggregate { order, items, user, payments, shipments, ... }
+// ✅ 正确：通过聚合根访问
+OrderAggregate aggregate = repository.findById(id);
+aggregate.getItems().add(item);
 
-// ❌ Don't reference other aggregates by object
-private UserAggregate user;
-
-// ❌ Don't expose internal collection
-public List<OrderItemEntity> getItems() {
-    return items;  // Caller can modify directly
-}
-
-// ✅ Return unmodifiable copy
-public List<OrderItemEntity> getItems() {
-    return Collections.unmodifiableList(items);
-}
+// ❌ 错误：直接修改聚合内对象（绕过了聚合根）
+OrderAggregate aggregate = repository.findById(id);
+aggregate.getItems().get(0).setQuantity(5); // 绕过了聚合根
 ```
+
+## 常见问题
+
+### Q: 什么时候需要聚合？
+
+当业务操作涉及**多个相关对象**需要保持一致性时，应该使用聚合。
+
+### Q: 聚合和实体有什么区别？
+
+- **实体**：代表单个业务主体，有唯一标识
+- **聚合**：封装一组相关对象，定义事务边界
+
+简单来说：如果一个业务操作只需要操作单个对象，可能不需要聚合；如果需要操作多个相关对象，应该使用聚合。
+
+### Q: 聚合应该有多大？
+
+聚合应该**尽量小**，只包含完成业务操作所必需的对象。过大的聚合会导致性能问题和事务冲突。
+
+### Q: 聚合根必须是实体吗？
+
+是的，聚合根必须是实体，因为它需要持有唯一标识来被外部引用。

@@ -1,159 +1,315 @@
-# Value Object Design Reference
+# Value Object 值对象设计规范
 
-## Table of Contents
+## 概述
 
-1. [What is a Value Object](#1-what-is-a-value-object)
-2. [Immutability](#2-immutability)
-3. [Equality](#3-equality)
-4. [Value Object Template](#4-value-object-template)
-5. [Common Patterns](#5-common-patterns)
-6. [When to Use](#6-when-to-use)
+Value Object（值对象）是 DDD 领域层中用于表示**没有唯一标识**、**不可变**的概念。值对象强调的是"是什么"而不是"是谁"。
 
----
+## 目录结构
 
-## 1. What is a Value Object
-
-A Value Object is:
-- **Immutable** - Cannot change after creation
-- **No identity** - Equality based on properties, not ID
-- **Describes things** - Measures, quantities, ranges
-
-### Entity vs Value Object
-
-| Aspect | Entity | Value Object |
-|--------|--------|--------------|
-| Identity | Has unique ID | No identity |
-| Equality | By identity | By all properties |
-| Mutability | Mutable | Immutable |
-| Lifecycle | Has lifecycle | No lifecycle |
-| Example | Order, User | Money, Address, DateRange |
-
----
-
-## 2. Immutability
-
-### Why Immutable?
-
-- **Thread-safe** - No synchronization needed
-- **Predictable** - No unexpected changes
-- **Hash-safe** - Safe as HashMap keys
-- **Simple** - No state management
-
-### Implementation
-
-```java
-// ✅ Immutable: No setters, final fields
-@Getter
-public final class MoneyVO {
-    private final BigDecimal amount;
-    private final String currency;
-    
-    private MoneyVO(BigDecimal amount, String currency) {
-        this.amount = amount;
-        this.currency = currency;
-    }
-    
-    // Operations return new instances
-    public MoneyVO add(MoneyVO other) {
-        return new MoneyVO(amount.add(other.amount), currency);
-    }
-}
+```
+model/
+├── aggregate/              # 聚合根
+├── entity/               # 实体对象
+└── valobj/               # ⭐ 值对象
+    ├── XxxVO.java         # 普通值对象
+    ├── XxxEnumVO.java    # 枚举值对象
+    └── enums/            # 枚举内部类（可选）
+        └── XxxEnum.java
 ```
 
----
+## 值对象特征
 
-## 3. Equality
+1. **无唯一标识**：不具有唯一 ID，通过属性值判断相等性
+2. **不可变**：创建后不可修改，任何修改都返回新实例
+3. **可替换**：两个属性相同的值对象可以互换
+4. **内聚性**：可以包含相关的业务逻辑方法
 
-### Override equals and hashCode
+## 值对象分类
 
-```java
-@Getter
-public final class AddressVO {
-    private final String province;
-    private final String city;
-    private final String district;
-    private final String detail;
-    
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        AddressVO that = (AddressVO) o;
-        return Objects.equals(province, that.province)
-            && Objects.equals(city, that.city)
-            && Objects.equals(district, that.district)
-            && Objects.equals(detail, that.detail);
-    }
-    
-    @Override
-    public int hashCode() {
-        return Objects.hash(province, city, district, detail);
-    }
-}
-```
+### 1. 普通值对象（VO）
 
----
-
-## 4. Value Object Template
-
-### Basic Template
+#### 编码示例
 
 ```java
+package cn.bugstack.domain.trade.model.valobj;
+
+import lombok.*;
+
 /**
- * {Domain} Value Object
- * 
- * Immutable representation of {concept}.
+ * 拼团退单消息
+ * @author xiaofuge bugstack.cn @小傅哥
+ */
+@Data
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class TeamRefundSuccess {
+
+    /** 退单类型 */
+    private String type;
+    
+    /** 用户ID */
+    private String userId;
+    
+    /** 拼单组队ID */
+    private String teamId;
+    
+    /** 活动ID */
+    private Long activityId;
+    
+    /** 预购订单ID */
+    private String orderId;
+    
+    /** 外部交易单号 */
+    private String outTradeNo;
+
+}
+```
+
+### 2. 配置值对象
+
+```java
+package cn.bugstack.domain.trade.model.valobj;
+
+import lombok.*;
+
+/**
+ * 回调配置值对象
+ * @author Fuzhengwei bugstack.cn @小傅哥
  */
 @Getter
-public final class {Domain}VO {
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class NotifyConfigVO {
 
-    private final {Type} property1;
-    private final {Type} property2;
+    /** 回调方式：MQ、HTTP */
+    private NotifyTypeEnumVO notifyType;
+    
+    /** 回调消息 */
+    private String notifyMQ;
+    
+    /** 回调地址 */
+    private String notifyUrl;
 
-    private {Domain}VO({Type} property1, {Type} property2) {
-        this.property1 = property1;
-        this.property2 = property2;
+}
+```
+
+### 3. 进度值对象
+
+```java
+package cn.bugstack.domain.trade.model.valobj;
+
+import lombok.*;
+
+/**
+ * 拼团进度值对象
+ */
+@Data
+public class GroupBuyProgressVO {
+
+    /** 组队ID */
+    private String teamId;
+    
+    /** 目标数量 */
+    private Integer targetCount;
+    
+    /** 完成数量 */
+    private Integer completeCount;
+    
+    /** 进度百分比 */
+    private Double progressPercent;
+    
+    /** 是否完成 */
+    public boolean isCompleted() {
+        return completeCount >= targetCount;
     }
     
-    /**
-     * Factory method
-     */
-    public static {Domain}VO of({Type} property1, {Type} property2) {
-        // Validation
-        if (property1 == null) {
-            throw new IllegalArgumentException("property1 required");
-        }
-        return new {Domain}VO(property1, property2);
-    }
-    
-    /**
-     * Operations return new instances
-     */
-    public {Domain}VO withProperty1({Type} newValue) {
-        return new {Domain}VO(newValue, this.property2);
-    }
-    
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        {Domain}VO that = ({Domain}VO) o;
-        return Objects.equals(property1, that.property1)
-            && Objects.equals(property2, that.property2);
-    }
-    
-    @Override
-    public int hashCode() {
-        return Objects.hash(property1, property2);
+    /** 获取剩余数量 */
+    public Integer getRemainingCount() {
+        return Math.max(0, targetCount - completeCount);
     }
 }
 ```
 
-### Complete Examples
+## 枚举值对象（Enum VO）
 
-#### Money Value Object
+### 概述
+
+枚举值对象用于表示**一组固定的业务状态或类型**，是值对象的一种特殊形式。
+
+### 特征
+
+- 使用 `enum` 关键字定义
+- 包含状态码和描述
+- 可以包含行为方法
+- 可以使用抽象方法让每个枚举值实现自己的逻辑
+
+### 简单枚举
 
 ```java
+package cn.bugstack.domain.trade.model.valobj;
+
+import lombok.*;
+
+/**
+ * 交易订单状态枚举
+ * @author Fuzhengwei bugstack.cn @小傅哥
+ */
+@Getter
+@AllArgsConstructor
+public enum TradeOrderStatusEnumVO {
+
+    CREATE(0, "初始创建"),
+    COMPLETE(1, "消费完成"),
+    CLOSE(2, "用户退单");
+
+    private Integer code;
+    private String info;
+
+    /**
+     * 根据状态码获取枚举
+     */
+    public static TradeOrderStatusEnumVO valueOf(Integer code) {
+        switch (code) {
+            case 0: return CREATE;
+            case 1: return COMPLETE;
+            case 2: return CLOSE;
+        }
+        return CREATE;
+    }
+}
+```
+
+### 复杂枚举（策略模式）
+
+当枚举值需要包含行为时，使用抽象方法：
+
+```java
+package cn.bugstack.domain.trade.model.valobj;
+
+import lombok.*;
+
+/**
+ * 退单类型枚举 - 策略枚举
+ * @author xiaofuge bugstack.cn @小傅哥
+ */
+@Getter
+@AllArgsConstructor
+public enum RefundTypeEnumVO {
+
+    /** 未支付，未成团 */
+    UNPAID_UNLOCK("unpaid_unlock", "Unpaid2RefundStrategy", "未支付，未成团") {
+        @Override
+        public boolean matches(GroupBuyOrderEnumVO groupBuyOrderEnumVO, TradeOrderStatusEnumVO tradeOrderStatusEnumVO) {
+            return GroupBuyOrderEnumVO.PROGRESS.equals(groupBuyOrderEnumVO) 
+                && TradeOrderStatusEnumVO.CREATE.equals(tradeOrderStatusEnumVO);
+        }
+    },
+    
+    /** 已支付，未成团 */
+    PAID_UNFORMED("paid_unformed", "Paid2RefundStrategy", "已支付，未成团") {
+        @Override
+        public boolean matches(GroupBuyOrderEnumVO groupBuyOrderEnumVO, TradeOrderStatusEnumVO tradeOrderStatusEnumVO) {
+            return GroupBuyOrderEnumVO.PROGRESS.equals(groupBuyOrderEnumVO) 
+                && TradeOrderStatusEnumVO.COMPLETE.equals(tradeOrderStatusEnumVO);
+        }
+    },
+    
+    /** 已支付，已成团 */
+    PAID_FORMED("paid_formed", "PaidTeam2RefundStrategy", "已支付，已成团") {
+        @Override
+        public boolean matches(GroupBuyOrderEnumVO groupBuyOrderEnumVO, TradeOrderStatusEnumVO tradeOrderStatusEnumVO) {
+            return (GroupBuyOrderEnumVO.COMPLETE.equals(groupBuyOrderEnumVO) 
+                    || GroupBuyOrderEnumVO.COMPLETE_FAIL.equals(groupBuyOrderEnumVO))
+                && TradeOrderStatusEnumVO.COMPLETE.equals(tradeOrderStatusEnumVO);
+        }
+    };
+
+    private String code;
+    private String strategy;
+    private String info;
+
+    /**
+     * 抽象方法，由每个枚举值实现自己的匹配逻辑
+     */
+    public abstract boolean matches(GroupBuyOrderEnumVO groupBuyOrderEnumVO, TradeOrderStatusEnumVO tradeOrderStatusEnumVO);
+
+    /**
+     * 根据状态组合获取对应的退款策略枚举
+     */
+    public static RefundTypeEnumVO getRefundStrategy(GroupBuyOrderEnumVO groupBuyOrderEnumVO, 
+                                                     TradeOrderStatusEnumVO tradeOrderStatusEnumVO) {
+        return Arrays.stream(values())
+                .filter(refundType -> refundType.matches(groupBuyOrderEnumVO, tradeOrderStatusEnumVO))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("不支持的退款状态组合"));
+    }
+}
+```
+
+### 枚举值对象的使用
+
+```java
+// 1. 基本使用
+TradeOrderStatusEnumVO status = TradeOrderStatusEnumVO.CREATE;
+System.out.println(status.getInfo()); // 输出：初始创建
+
+// 2. 策略枚举的匹配
+RefundTypeEnumVO refundType = RefundTypeEnumVO.getRefundStrategy(
+    GroupBuyOrderEnumVO.PROGRESS, 
+    TradeOrderStatusEnumVO.COMPLETE
+);
+String strategy = refundType.getStrategy(); // 获取对应的策略bean名称
+
+// 3. 使用 Spring 注入策略
+@Service
+public class RefundService {
+    
+    @Resource
+    private Map<String, IRefundOrderStrategy> strategyMap;
+    
+    public void refund(TradeRefundCommandEntity command) {
+        RefundTypeEnumVO refundType = RefundTypeEnumVO.getRefundStrategy(
+            command.getGroupBuyStatus(), 
+            command.getTradeStatus()
+        );
+        
+        // 根据枚举获取策略实现
+        IRefundOrderStrategy strategy = strategyMap.get(refundType.getStrategy());
+        strategy.refundOrder(command);
+    }
+}
+```
+
+## 真实工程示例
+
+参考 `group-buy-market` 项目的 valobj 目录：
+
+```
+domain/trade/model/valobj/
+├── TeamRefundSuccess.java              # 普通值对象
+├── NotifyConfigVO.java                 # 配置值对象
+├── GroupBuyProgressVO.java            # 进度值对象
+├── RefundTypeEnumVO.java             # 枚举值对象（策略模式）
+├── NotifyTypeEnumVO.java             # 枚举值对象
+└── TradeOrderStatusEnumVO.java        # 枚举值对象
+```
+
+## 命名规范
+
+| 类型 | 命名规范 | 示例 | 说明 |
+|------|---------|------|------|
+| 普通值对象 | `XxxVO` | `TeamRefundSuccess` | 代表业务概念 |
+| 枚举值对象 | `XxxEnumVO` | `TradeOrderStatusEnumVO` | 表示固定状态 |
+| 内部枚举类 | `XxxEnum` | `StatusEnum` | 可以在 VO 内部定义 |
+
+## 设计原则
+
+### 1. 值对象应该不可变
+
+```java
+// ✅ 正确：不可变值对象
 @Getter
 public final class MoneyVO {
     private final BigDecimal amount;
@@ -164,213 +320,106 @@ public final class MoneyVO {
         this.currency = currency;
     }
     
-    public static MoneyVO of(BigDecimal amount, String currency) {
-        if (amount == null) {
-            throw new IllegalArgumentException("amount required");
-        }
-        if (currency == null || currency.isEmpty()) {
-            currency = "CNY";
-        }
-        return new MoneyVO(amount, currency);
-    }
-    
-    public static MoneyVO zero(String currency) {
-        return new MoneyVO(BigDecimal.ZERO, currency);
-    }
-    
+    /** 加法操作返回新实例 */
     public MoneyVO add(MoneyVO other) {
-        validateSameCurrency(other);
         return new MoneyVO(amount.add(other.amount), currency);
     }
+}
+
+// ❌ 错误：可变值对象
+@Getter
+public class MoneyVO {
+    private BigDecimal amount;
+    private String currency;
     
-    public MoneyVO subtract(MoneyVO other) {
-        validateSameCurrency(other);
-        return new MoneyVO(amount.subtract(other.amount), currency);
-    }
-    
-    public MoneyVO multiply(BigDecimal factor) {
-        return new MoneyVO(amount.multiply(factor), currency);
-    }
-    
-    public boolean isPositive() {
-        return amount.compareTo(BigDecimal.ZERO) > 0;
-    }
-    
-    public boolean isZero() {
-        return amount.compareTo(BigDecimal.ZERO) == 0;
-    }
-    
-    private void validateSameCurrency(MoneyVO other) {
-        if (!currency.equals(other.currency)) {
-            throw new IllegalArgumentException("Currency mismatch");
-        }
-    }
-    
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        MoneyVO moneyVO = (MoneyVO) o;
-        return Objects.equals(amount, moneyVO.amount)
-            && Objects.equals(currency, moneyVO.currency);
-    }
-    
-    @Override
-    public int hashCode() {
-        return Objects.hash(amount, currency);
+    public void add(MoneyVO other) {
+        this.amount = this.amount.add(other.amount); // 直接修改
     }
 }
 ```
 
-#### Address Value Object
+### 2. 枚举值可以包含行为
+
+```java
+public enum OrderStatusEnumVO {
+    
+    PENDING("待支付") {
+        @Override
+        public boolean canPay() { return true; }
+        @Override
+        public boolean canCancel() { return true; }
+    },
+    
+    PAID("已支付") {
+        @Override
+        public boolean canPay() { return false; }
+        @Override
+        public boolean canCancel() { return false; }
+    };
+    
+    private String description;
+    
+    public abstract boolean canPay();
+    public abstract boolean canCancel();
+}
+
+// 使用
+OrderStatusEnumVO status = OrderStatusEnumVO.PENDING;
+if (status.canCancel()) {
+    // 可以取消
+}
+```
+
+### 3. 使用内部类组织相关枚举
 
 ```java
 @Getter
-public final class AddressVO {
-    private final String province;
-    private final String city;
-    private final String district;
-    private final String detail;
-    private final String postalCode;
+public class OrderAggregate {
+
+    /** 聚合根属性 */
+    private String orderId;
+    private OrderStatusEnumVO status;
     
-    private AddressVO(String province, String city, String district, 
-                      String detail, String postalCode) {
-        this.province = province;
-        this.city = city;
-        this.district = district;
-        this.detail = detail;
-        this.postalCode = postalCode;
+    // ========== 内部枚举类 ==========
+    public enum OrderStatusEnumVO {
+        PENDING, PAID, COMPLETED, CANCELLED
     }
     
-    public static AddressVO of(String province, String city, 
-                               String district, String detail) {
-        return new AddressVO(province, city, district, detail, null);
-    }
-    
-    public static AddressVO full(String province, String city, 
-                                 String district, String detail, 
-                                 String postalCode) {
-        return new AddressVO(province, city, district, detail, postalCode);
-    }
-    
-    public AddressVO withDetail(String newDetail) {
-        return new AddressVO(province, city, district, newDetail, postalCode);
-    }
-    
-    public String fullAddress() {
-        StringBuilder sb = new StringBuilder();
-        if (province != null) sb.append(province);
-        if (city != null) sb.append(city);
-        if (district != null) sb.append(district);
-        if (detail != null) sb.append(detail);
-        return sb.toString();
-    }
-    
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        AddressVO addressVO = (AddressVO) o;
-        return Objects.equals(province, addressVO.province)
-            && Objects.equals(city, addressVO.city)
-            && Objects.equals(district, addressVO.district)
-            && Objects.equals(detail, addressVO.detail)
-            && Objects.equals(postalCode, addressVO.postalCode);
-    }
-    
-    @Override
-    public int hashCode() {
-        return Objects.hash(province, city, district, detail, postalCode);
+    public enum PaymentMethodEnumVO {
+        WECHAT, ALIPAY, CARD
     }
 }
 ```
 
----
+## 常见问题
 
-## 5. Common Patterns
+### Q: 值对象和实体的区别？
 
-### Enum as Value Object
+| 维度 | 值对象 | 实体 |
+|------|--------|------|
+| 标识 | 无标识 | 有唯一标识 |
+| 相等性 | 通过属性值判断 | 通过标识判断 |
+| 可变性 | 不可变 | 可变 |
+| 生命周期 | 无生命周期 | 有生命周期 |
 
+### Q: 什么时候用枚举值对象？
+
+当业务状态或类型是**固定**的、可枚举的，应该使用枚举：
+- 订单状态：待支付、已支付、已完成、已取消
+- 退款类型：未支付退款、已支付退款
+- 通知方式：MQ、HTTP
+
+### Q: 枚举值对象的方法放在哪里？
+
+如果方法只涉及该枚举本身，放在枚举类中：
 ```java
-@Getter
-@AllArgsConstructor
-public enum OrderStatusEnum {
-    PENDING(0, "待支付"),
-    PAID(1, "已支付"),
-    DELIVERED(2, "已发货"),
-    CANCELLED(9, "已取消");
+public enum StatusEnum {
+    ACTIVE, INACTIVE;
     
-    private final Integer code;
-    private final String desc;
-    
-    public static OrderStatusEnum valueOf(Integer code) {
-        if (code == null) return PENDING;
-        for (OrderStatusEnum status : values()) {
-            if (status.code.equals(code)) {
-                return status;
-            }
-        }
-        return PENDING;
-    }
-    
-    public boolean canPay() {
-        return this == PENDING;
-    }
-    
-    public boolean canCancel() {
-        return this == PENDING || this == PAID;
+    public boolean isActive() {
+        return this == ACTIVE;
     }
 }
 ```
 
-### Composite Value Object
-
-```java
-@Getter
-public final class DateRangeVO {
-    private final LocalDateTime start;
-    private final LocalDateTime end;
-    
-    private DateRangeVO(LocalDateTime start, LocalDateTime end) {
-        if (start != null && end != null && start.isAfter(end)) {
-            throw new IllegalArgumentException("Start must be before end");
-        }
-        this.start = start;
-        this.end = end;
-    }
-    
-    public static DateRangeVO of(LocalDateTime start, LocalDateTime end) {
-        return new DateRangeVO(start, end);
-    }
-    
-    public boolean contains(LocalDateTime date) {
-        if (date == null) return false;
-        boolean afterStart = start == null || !date.isBefore(start);
-        boolean beforeEnd = end == null || !date.isAfter(end);
-        return afterStart && beforeEnd;
-    }
-    
-    public long days() {
-        if (start == null || end == null) return 0;
-        return ChronoUnit.DAYS.between(start, end);
-    }
-}
-```
-
----
-
-## 6. When to Use
-
-### Use Value Object when:
-
-- Describing measurements (Money, Weight, Distance)
-- Representing ranges (DateRange, NumberRange)
-- Composite attributes (Address, FullName)
-- Type-safe identifiers (OrderId, UserId)
-- Enumerated types (Status, Type)
-
-### Don't use Value Object when:
-
-- Object needs identity (use Entity)
-- State changes over time (use Entity)
-- Need to track lifecycle (use Entity)
+如果方法需要依赖其他领域对象，应该放在 Domain Service 中。

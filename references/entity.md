@@ -1,391 +1,291 @@
-# Entity Design Reference
+# Entity 实体对象设计规范
 
-## Table of Contents
+## 概述
 
-1. [What is an Entity](#1-what-is-an-entity)
-2. [Entity vs Value Object](#2-entity-vs-value-object)
-3. [Rich Domain Model](#3-rich-domain-model)
-4. [Entity Template](#4-entity-template)
-5. [Behavior Methods](#5-behavior-methods)
-6. [Factory Methods](#6-factory-methods)
-7. [Best Practices](#7-best-practices)
+Entity（实体对象）是 DDD 领域层中最核心的概念之一。它代表具有唯一标识的对象，其生命周期内身份保持不变。
 
----
+## 目录结构
 
-## 1. What is an Entity
-
-An Entity is a domain object with:
-- **Unique identity** (distinguishes it from other entities)
-- **Lifecycle** (created, modified, eventually deleted)
-- **State** (properties that can change)
-- **Behavior** (methods that operate on its state)
-
-### Key Characteristics
-
-| Characteristic | Description |
-|---------------|-------------|
-| Identity | Has a unique identifier (id, orderId, etc.) |
-| Equality | Compared by identity, not properties |
-| Mutability | State can change over time |
-| Continuity | Same identity throughout lifecycle |
-
----
-
-## 2. Entity vs Value Object
-
-| Aspect | Entity | Value Object |
-|--------|--------|--------------|
-| Identity | Has unique ID | No identity |
-| Equality | By identity | By properties |
-| Mutability | Mutable | Immutable |
-| Lifecycle | Has lifecycle | No lifecycle |
-| Example | Order, User | Money, Address |
-
-```java
-// Entity: Has identity
-OrderEntity order1 = new OrderEntity(1L, "ORD-001");
-OrderEntity order2 = new OrderEntity(1L, "ORD-002");
-order1.equals(order2); // true - same ID
-
-// Value Object: No identity
-MoneyVO money1 = MoneyVO.of(BigDecimal.TEN, "USD");
-MoneyVO money2 = MoneyVO.of(BigDecimal.TEN, "USD");
-money1.equals(money2); // true - same properties
+```
+model/
+├── aggregate/              # 聚合根
+│   └── XxxAggregate.java
+├── entity/               # ⭐ 实体对象（包括命令实体）
+│   ├── XxxEntity.java     # 普通实体对象
+│   └── XxxCommandEntity.java  # 命令实体对象
+└── valobj/               # 值对象
+    ├── XxxVO.java        # 值对象
+    └── XxxEnumVO.java   # 枚举值对象
 ```
 
----
+**⚠️ 注意**：不要创建单独的 `command/` 包，命令实体统一放在 `entity/` 包下。
 
-## 3. Rich Domain Model
+## 命名规范
 
-### Anemic Model (Avoid)
+| 类型 | 命名规范 | 示例 | 说明 |
+|------|---------|------|------|
+| 普通实体 | `XxxEntity` | `UserEntity` | 代表业务主体 |
+| 命令实体 | `XxxCommandEntity` | `TradeLockRuleCommandEntity` | 用于接收输入/命令 |
+| 过滤反馈实体 | `XxxFilterBackEntity` | `TradeLockRuleFilterBackEntity` | 责任链模式返回结果 |
 
-```java
-// ❌ Anemic: Data only, no behavior
-@Data
-public class OrderEntity {
-    private Long id;
-    private OrderStatus status;
-    private BigDecimal amount;
-}
+## 普通实体对象
 
-// Logic in service
-@Service
-public class OrderService {
-    public void pay(OrderEntity order) {
-        if (order.getStatus() != PENDING) {
-            throw new BusinessException("Cannot pay");
-        }
-        order.setStatus(PAID);
-    }
-}
-```
+### 定义
 
-### Rich Model (Recommended)
+普通实体对象代表业务领域中具有唯一标识和生命周期的主体。
+
+### 特征
+
+- **唯一标识**：具有唯一 ID
+- **生命周期**：有创建、修改、删除等状态变化
+- **连续性**：标识在生命周期内保持不变
+- **行为**：封装了与自身相关的业务行为
+
+### 编码示例
 
 ```java
-// ✅ Rich: Data + behavior
-@Data
-@Builder
-public class OrderEntity {
-    private Long id;
-    private OrderStatus status;
-    private BigDecimal amount;
-    
-    // Behavior in entity
-    public void pay() {
-        if (status != PENDING) {
-            throw new BusinessException("Cannot pay");
-        }
-        this.status = PAID;
-    }
-    
-    public boolean canPay() {
-        return status == PENDING;
-    }
-}
-```
+package cn.bugstack.domain.trade.model.entity;
 
-### Why Rich Model?
+import cn.bugstack.domain.trade.model.valobj.TradeOrderStatusEnumVO;
+import lombok.*;
 
-- **Encapsulation**: Logic close to data
-- **Reusability**: Same logic everywhere
-- **Maintainability**: Single source of truth
-- **Testability**: Easy to unit test
-
----
-
-## 4. Entity Template
-
-### Basic Template
-
-```java
 /**
- * {Domain} Entity
- * 
- * Represents a {business concept} in the domain.
+ * 拼团，预购订单营销实体对象
+ * @author Fuzhengwei bugstack.cn @小傅哥
  */
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class {Domain}Entity {
+public class MarketPayOrderEntity {
 
-    /** Unique identifier */
-    private Long id;
+    /** 拼单组队ID */
+    private String teamId;
     
-    /** Business identifier */
-    private String bizId;
+    /** 预购订单ID */
+    private String orderId;
     
-    /** Current status */
-    private {Domain}StatusEnum status;
+    /** 原始价格 */
+    private BigDecimal originalPrice;
     
-    /** Business properties */
-    private String property1;
-    private BigDecimal property2;
+    /** 折扣金额 */
+    private BigDecimal deductionPrice;
+    
+    /** 支付金额 */
+    private BigDecimal payPrice;
+    
+    /** 交易订单状态枚举 */
+    private TradeOrderStatusEnumVO tradeOrderStatusEnumVO;
 
-    // ==================== Behavior Methods ====================
-    
-    /**
-     * Validate entity state
-     */
-    public void validate() {
-        if (property1 == null || property1.isEmpty()) {
-            throw new IllegalArgumentException("property1 required");
-        }
-    }
-    
-    /**
-     * Check if operation is allowed
-     */
-    public boolean canOperate() {
-        return status == {Domain}StatusEnum.ACTIVE;
-    }
-    
-    /**
-     * Change state
-     */
-    public void activate() {
-        if (status != {Domain}StatusEnum.INIT) {
-            throw new BusinessException("Only INIT can be activated");
-        }
-        this.status = {Domain}StatusEnum.ACTIVE;
-    }
 }
 ```
 
-### Complete Example
+## 命令实体对象
+
+### 定义
+
+命令实体对象（Command Entity）用于接收来自外部的输入命令，通常用于：
+- Controller 传入的请求参数
+- 服务间的调用参数
+- 责任链/过滤器模式的输入参数
+
+### 特征
+
+- **无状态**：只承载数据，不持有业务状态
+- **扁平化**：属性结构尽量扁平，避免深层嵌套
+- **验证**：可以包含参数校验逻辑
+- **命名后缀**：统一使用 `CommandEntity` 后缀
+
+### 编码示例
 
 ```java
+package cn.bugstack.domain.trade.model.entity;
+
+import lombok.*;
+
+/**
+ * 拼团交易命令实体
+ * @author Fuzhengwei bugstack.cn @小傅哥
+ */
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
+public class TradeLockRuleCommandEntity {
+
+    /** 用户ID */
+    private String userId;
+    
+    /** 活动ID */
+    private Long activityId;
+    
+    /** 组队ID */
+    private String teamId;
+
+}
+```
+
+## 过滤反馈实体
+
+### 定义
+
+过滤反馈实体（Filter Back Entity）用于责任链/过滤器模式中，返回过滤执行后的结果。
+
+### 编码示例
+
+```java
+package cn.bugstack.domain.trade.model.entity;
+
+import lombok.*;
+
+/**
+ * 拼团交易，过滤反馈实体
+ * @author Fuzhengwei bugstack.cn @小傅哥
+ */
+@Data
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class TradeLockRuleFilterBackEntity {
+
+    /** 用户参与活动的订单量 */
+    private Integer userTakeOrderCount;
+
+    /** 恢复组队库存缓存key */
+    private String recoveryTeamStockKey;
+
+}
+```
+
+## 实体与值对象的区别
+
+| 维度 | 实体 Entity | 值对象 Value Object |
+|------|-------------|-------------------|
+| 标识 | 有唯一标识 | 无标识，通过属性值相等 |
+| 可变性 | 可变状态 | 不可变，创建后不可修改 |
+| 生命周期 | 有生命周期 | 无生命周期概念 |
+| 相等性判断 | 通过 ID 判断 | 通过属性值判断 |
+| 存放位置 | `entity/` 包 | `valobj/` 包 |
+| 命名后缀 | `XxxEntity` | `XxxVO` / `XxxEnumVO` |
+
+## 真实工程示例
+
+参考 `group-buy-market` 项目的 entity 目录结构：
+
+```
+domain/trade/model/entity/
+├── MarketPayOrderEntity.java              # 普通实体
+├── GroupBuyTeamEntity.java                # 普通实体
+├── UserEntity.java                        # 普通实体
+├── PayActivityEntity.java                 # 普通实体
+├── PayDiscountEntity.java                 # 普通实体
+├── TradeRefundCommandEntity.java          # 命令实体
+├── TradeLockRuleCommandEntity.java        # 命令实体
+├── TradeSettlementRuleCommandEntity.java  # 命令实体
+├── TradeLockRuleFilterBackEntity.java     # 过滤反馈实体
+└── TradeSettlementRuleFilterBackEntity.java # 过滤反馈实体
+```
+
+## 设计原则
+
+### 1. 实体应包含业务行为
+
+```java
+// ✅ 正确：实体包含行为
+@Data
 public class OrderEntity {
-
-    private Long id;
     private String orderId;
-    private Long userId;
-    private OrderStatusEnum status;
     private BigDecimal amount;
-    private LocalDateTime createdAt;
-
-    // ==================== Validation ====================
-    
-    public void validate() {
-        if (orderId == null || orderId.isEmpty()) {
-            throw new IllegalArgumentException("orderId required");
-        }
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("amount must be positive");
-        }
-    }
-
-    // ==================== State Queries ====================
-    
-    public boolean canPay() {
-        return status == OrderStatusEnum.PENDING;
-    }
-    
-    public boolean canCancel() {
-        return status == OrderStatusEnum.PENDING 
-            || status == OrderStatusEnum.PAID;
-    }
-    
-    public boolean isPaid() {
-        return status == OrderStatusEnum.PAID;
-    }
-
-    // ==================== State Changes ====================
     
     public void pay() {
-        if (!canPay()) {
-            throw new BusinessException("Order cannot be paid");
-        }
-        this.status = OrderStatusEnum.PAID;
+        // 支付逻辑
     }
     
-    public void cancel() {
-        if (!canCancel()) {
-            throw new BusinessException("Order cannot be cancelled");
-        }
-        this.status = OrderStatusEnum.CANCELLED;
-    }
-    
-    public void deliver() {
-        if (status != OrderStatusEnum.PAID) {
-            throw new BusinessException("Only paid orders can be delivered");
-        }
-        this.status = OrderStatusEnum.DELIVERED;
-    }
-
-    // ==================== Conversions ====================
-    
-    public OrderVO toVO() {
-        return OrderVO.builder()
-            .orderId(orderId)
-            .status(status)
-            .amount(amount)
-            .build();
-    }
-}
-```
-
----
-
-## 5. Behavior Methods
-
-### Method Categories
-
-| Category | Purpose | Naming |
-|----------|---------|--------|
-| Validation | Check state validity | `validate()` |
-| Query | Check if action allowed | `canXxx()`, `isXxx()` |
-| Command | Change state | `activate()`, `pay()` |
-| Conversion | Transform to other types | `toVO()`, `toEntity()` |
-| Business | Domain logic | `calculateTotal()` |
-
-### Validation Methods
-
-```java
-// Throw exception if invalid
-public void validate() {
-    if (amount == null) {
-        throw new IllegalArgumentException("amount required");
+    public boolean canRefund() {
+        // 退款条件判断
+        return true;
     }
 }
 
-// Return boolean
-public boolean isValid() {
-    return amount != null && amount.compareTo(BigDecimal.ZERO) > 0;
-}
-```
-
-### Query Methods
-
-```java
-// State queries
-public boolean canPay() { return status == PENDING; }
-public boolean canCancel() { return status != DELIVERED; }
-public boolean isPaid() { return status == PAID; }
-public boolean isActive() { return status == ACTIVE; }
-```
-
-### Command Methods
-
-```java
-// State changes with validation
-public void pay() {
-    if (!canPay()) throw new BusinessException("Cannot pay");
-    this.status = PAID;
-    this.paidAt = LocalDateTime.now();
-}
-
-public void cancel(String reason) {
-    if (!canCancel()) throw new BusinessException("Cannot cancel");
-    this.status = CANCELLED;
-    this.cancelReason = reason;
-}
-```
-
----
-
-## 6. Factory Methods
-
-### Static Factory in Entity
-
-```java
+// ❌ 错误：实体只是数据容器
+@Data
 public class OrderEntity {
-    // Private constructor
-    private OrderEntity() {}
-    
-    // Factory method
-    public static OrderEntity create(String orderId, BigDecimal amount) {
-        OrderEntity entity = new OrderEntity();
-        entity.orderId = orderId;
-        entity.amount = amount;
-        entity.status = OrderStatusEnum.PENDING;
-        entity.createdAt = LocalDateTime.now();
-        entity.validate();
-        return entity;
-    }
-    
-    // Reconstruct from persistence
-    public static OrderEntity from(OrderPO po) {
-        OrderEntity entity = new OrderEntity();
-        entity.id = po.getId();
-        entity.orderId = po.getOrderId();
-        entity.status = OrderStatusEnum.valueOf(po.getStatus());
-        entity.amount = po.getAmount();
-        return entity;
-    }
+    private String orderId;
+    private BigDecimal amount;
+    // 只有 getter/setter
 }
 ```
 
----
-
-## 7. Best Practices
-
-### Do
+### 2. 命令实体保持简洁
 
 ```java
-// ✅ Keep behavior in entity
-public void pay() { /* ... */ }
-
-// ✅ Use meaningful names
-public boolean canBePaidBy(UserEntity user) { /* ... */ }
-
-// ✅ Validate before state change
-public void activate() {
-    validate();
-    this.status = ACTIVE;
+// ✅ 正确：命令实体简洁扁平
+@Data
+public class CreateOrderCommandEntity {
+    private String userId;
+    private Long activityId;
+    private BigDecimal amount;
 }
 
-// ✅ Make invariants explicit
-public void addItem(OrderItemEntity item) {
-    if (items.size() >= MAX_ITEMS) {
-        throw new BusinessException("Max items reached");
-    }
-    items.add(item);
+// ❌ 错误：命令实体嵌套过深
+@Data
+public class CreateOrderCommandEntity {
+    private UserInfo user;      // 嵌套对象，尽量避免
+    private Activity activity;  // 保持扁平化
 }
 ```
 
-### Don't
+### 3. 避免贫血模型
+
+实体应该有丰富的业务行为，而不是只有 getter/setter：
 
 ```java
-// ❌ Don't inject services
-@Resource
-private IOrderRepository repository; // ❌
+@Data
+public class FormDefinitionEntity {
 
-// ❌ Don't call external systems
-public void pay() {
-    paymentService.process(); // ❌
-}
+    private Long id;
+    private String name;
+    private String status;
+    private List<FormFieldEntity> fields;
 
-// ❌ Don't use anemic model
-// All logic in OrderService, none in OrderEntity
+    // ✅ 业务行为方法
+    public boolean canPublish() {
+        return "draft".equals(status) && fields != null && !fields.isEmpty();
+    }
 
-// ❌ Don't expose setters freely
-public void setStatus(OrderStatusEnum status) { // ❌
-    this.status = status;
+    public void publish() {
+        if (!canPublish()) {
+            throw new IllegalStateException("表单不能发布");
+        }
+        this.status = "published";
+    }
+
+    public void addField(FormFieldEntity field) {
+        if (fields == null) {
+            fields = new ArrayList<>();
+        }
+        fields.add(field);
+    }
 }
 ```
+
+## 常见问题
+
+### Q: 什么时候用命令实体？
+
+当需要接收外部输入时使用命令实体：
+- Controller 的请求参数
+- Domain Service 的入参
+- 过滤器/责任链的输入参数
+
+### Q: 命令实体和普通实体的区别？
+
+| 维度 | 普通实体 | 命令实体 |
+|------|---------|---------|
+| 生命周期 | 有完整生命周期 | 只存在于请求处理中 |
+| 状态 | 有业务状态 | 无状态，只有数据 |
+| 行为 | 可能有业务行为 | 一般不包含行为 |
+
+### Q: 命令实体放在哪里？
+
+统一放在 `entity/` 包下，使用 `XxxCommandEntity` 后缀命名。

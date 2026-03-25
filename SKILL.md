@@ -1,7 +1,7 @@
 ---
-name: ddd-skills
-version: 2.0.0
-description: "DDD 六边形架构设计与开发技能包。当你需要设计或实现 DDD 领域驱动设计项目时使用，包括：六边形架构、端口与适配器、领域层设计（Entity/Aggregate/Value Object/Repository/Domain Service）、业务编排层（Case Layer）、触发层（Trigger Layer）、基础设施层（Infrastructure Layer）。触发词：'DDD'、'六边形架构'、'领域驱动设计'、'创建 DDD 项目'、'新建项目'。不要用于简单 CRUD 应用或没有领域复杂度的微服务。@小傅哥"
+name: xfg-ddd-skills
+version: 2.1.0
+description: "DDD 六边形架构设计与开发技能包。包含：领域层设计（Aggregate/Entity/CommandEntity/ValueObject/EnumVO）、Domain Service（策略模式/责任链模式/模板方法）、Repository、Port适配器、Case编排层、Trigger触发层、Infrastructure基础设施层。参考 group-buy-market 真实工程规范。触发词：'DDD'、'六边形架构'、'领域驱动设计'、'创建 DDD 项目'、'新建项目'。不要用于简单 CRUD 应用或没有领域复杂度的微服务。@小傅哥"
 author: xiaofuge
 license: MIT
 triggers:
@@ -14,6 +14,10 @@ triggers:
   - "创建聚合根"
   - "创建 DDD 项目"
   - "新建项目"
+  - "Aggregate"
+  - "ValueObject"
+  - "值对象"
+  - "聚合根"
 metadata:
   openclaw:
     emoji: "🏗️"
@@ -143,317 +147,185 @@ bash scripts/create-ddd-project.sh
 
 **Dependency Rule**: `Trigger → API → Case → Domain ← Infrastructure`
 
+## Domain Layer 目录结构
+
+```
+model/
+├── aggregate/              # 聚合对象
+│   └── XxxAggregate.java
+├── entity/               # 实体对象
+│   ├── XxxEntity.java          # 普通实体
+│   └── XxxCommandEntity.java  # 命令实体
+└── valobj/               # 值对象
+    ├── XxxVO.java             # 普通值对象
+    └── XxxEnumVO.java         # 枚举值对象
+```
+
+**⚠️ 注意**：`model/` 下没有单独的 `command/` 包，命令实体统一放在 `entity/` 包下。
+
 ## Quick Templates
 
-### Entity (Rich Domain Model)
+### Aggregate 聚合对象
 
 ```java
-@Data @Builder
-public class OrderEntity {
-    private Long id;
+@Data @Builder @AllArgsConstructor @NoArgsConstructor
+public class GroupBuyOrderAggregate {
+    /** 用户实体对象 */
+    private UserEntity userEntity;
+    /** 支付活动实体对象 */
+    private PayActivityEntity payActivityEntity;
+    /** 支付优惠实体对象 */
+    private PayDiscountEntity payDiscountEntity;
+    /** 已参与拼团量 */
+    private Integer userTakeOrderCount;
+}
+```
+
+### Entity 普通实体
+
+```java
+@Data @Builder @AllArgsConstructor @NoArgsConstructor
+public class MarketPayOrderEntity {
+    private String teamId;
     private String orderId;
-    private OrderStatus status;
-    private BigDecimal amount;
-    
-    // Rich behavior methods
-    public boolean canPay() {
-        return status == OrderStatus.PENDING;
-    }
-    
-    public void pay() {
-        if (!canPay()) throw new BusinessException("Cannot pay");
-        this.status = OrderStatus.PAID;
-    }
-    
-    public void validate() {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Invalid amount");
+    private BigDecimal originalPrice;
+    private BigDecimal deductionPrice;
+    private BigDecimal payPrice;
+    private TradeOrderStatusEnumVO tradeOrderStatusEnumVO;
+}
+```
+
+### Entity 命令实体（放在 entity 包）
+
+```java
+/** 命令实体放在 entity 包，使用 CommandEntity 后缀 */
+@Data @Builder @AllArgsConstructor @NoArgsConstructor
+public class TradeLockRuleCommandEntity {
+    private String userId;
+    private Long activityId;
+    private String teamId;
+}
+```
+
+### Value Object 值对象
+
+```java
+@Getter @Builder @AllArgsConstructor @NoArgsConstructor
+public class NotifyConfigVO {
+    private NotifyTypeEnumVO notifyType;
+    private String notifyMQ;
+    private String notifyUrl;
+}
+```
+
+### EnumVO 枚举值对象（可包含策略逻辑）
+
+```java
+@Getter @AllArgsConstructor
+public enum RefundTypeEnumVO {
+
+    UNPAID_UNLOCK("unpaid_unlock", "Unpaid2RefundStrategy", "未支付，未成团") {
+        @Override
+        public boolean matches(GroupBuyOrderEnumVO groupBuyOrderEnumVO, TradeOrderStatusEnumVO tradeOrderStatusEnumVO) {
+            return GroupBuyOrderEnumVO.PROGRESS.equals(groupBuyOrderEnumVO) 
+                && TradeOrderStatusEnumVO.CREATE.equals(tradeOrderStatusEnumVO);
         }
+    },
+    
+    PAID_UNFORMED("paid_unformed", "Paid2RefundStrategy", "已支付，未成团") {
+        @Override
+        public boolean matches(GroupBuyOrderEnumVO groupBuyOrderEnumVO, TradeOrderStatusEnumVO tradeOrderStatusEnumVO) {
+            return GroupBuyOrderEnumVO.PROGRESS.equals(groupBuyOrderEnumVO) 
+                && TradeOrderStatusEnumVO.COMPLETE.equals(tradeOrderStatusEnumVO);
+        }
+    };
+
+    private String code;
+    private String strategy;
+    private String info;
+
+    public abstract boolean matches(GroupBuyOrderEnumVO groupBuyOrderEnumVO, TradeOrderStatusEnumVO tradeOrderStatusEnumVO);
+
+    public static RefundTypeEnumVO getRefundStrategy(GroupBuyOrderEnumVO g, TradeOrderStatusEnumVO t) {
+        return Arrays.stream(values()).filter(v -> v.matches(g, t)).findFirst()
+                .orElseThrow(() -> new RuntimeException("不支持的退款状态组合"));
     }
 }
 ```
 
-### Aggregate
+### Domain Service 完整编码
 
 ```java
-@Data @Builder
-public class OrderAggregate {
-    private OrderEntity order;           // Root
-    private List<OrderItemEntity> items; // Related entities
-    private ShippingAddressVO address;   // Value object
-    
-    public void create() {
-        order.validate();
-        this.order.setStatus(OrderStatus.CREATED);
-    }
-    
-    public BigDecimal totalAmount() {
-        return items.stream()
-            .map(OrderItemEntity::getPrice)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-}
-```
-
-### Value Object (Immutable)
-
-```java
-@Getter
-public final class MoneyVO {
-    private final BigDecimal amount;
-    private final String currency;
-    
-    private MoneyVO(BigDecimal amount, String currency) {
-        this.amount = amount;
-        this.currency = currency;
-    }
-    
-    public static MoneyVO of(BigDecimal amount, String currency) {
-        return new MoneyVO(amount, currency);
-    }
-    
-    public MoneyVO add(MoneyVO other) {
-        return new MoneyVO(amount.add(other.amount), currency);
-    }
-}
-```
-
-### Repository Interface (Domain Layer)
-
-```java
-public interface IOrderRepository {
-    OrderAggregate findById(Long id);
-    OrderAggregate findByOrderId(String orderId);
-    void save(OrderAggregate aggregate);
-    void update(OrderAggregate aggregate);
-}
-```
-
-### Repository Implementation (Infrastructure Layer)
-
-```java
-@Repository
-public class OrderRepositoryImpl implements IOrderRepository {
-    @Resource private IOrderDao orderDao;
-    
-    @Override
-    @Transactional
-    public void save(OrderAggregate aggregate) {
-        OrderPO po = toPO(aggregate);
-        orderDao.insert(po);
-    }
-    
-    private OrderPO toPO(OrderAggregate aggregate) {
-        // Convert domain object to persistence object
-    }
-}
-```
-
-### Port Interface (Domain Layer)
-
-```java
-public interface INotificationPort {
-    void sendOrderCreated(OrderCreatedEvent event);
-}
-```
-
-### Port Adapter (Infrastructure Layer)
-
-```java
-@Service
-public class NotificationPortImpl implements INotificationPort {
-    @Resource private RestTemplate restTemplate;
-    
-    @Override
-    public void sendOrderCreated(OrderCreatedEvent event) {
-        restTemplate.postForObject(url, event, Void.class);
-    }
-}
-```
-
-### Controller (Trigger Layer)
-
-```java
-@Slf4j
-@RestController
-@RequestMapping("/api/v1/orders/")
-public class OrderController {
-    @Resource private IOrderCaseService orderCaseService;
-    
-    @PostMapping("/create")
-    public Response<OrderDTO> create(@RequestBody @Valid CreateOrderRequest request) {
-        return orderCaseService.createOrder(request);
-    }
-}
-```
-
-### Domain Service - 完整编码规范
-
-**参考真实工程**：`Documents/project/ddd-demo/group-buy-market`、`Documents/project/ddd-demo/ai-mcp-gateway`
-
-Domain Service 用于封装跨多个聚合根的业务逻辑，或不适合放在单个实体/聚合根上的操作。实现类按子包组织（`service/license/`、`service/lock/` 等），支持策略模式、责任链模式等设计模式。
-
-#### 1. 简单领域服务
-
-```java
-// 1. 定义服务接口
-public interface IOrderDomainService {
-    
-    /**
-     * 查询订单
-     */
-    OrderAggregate queryById(Long orderId);
-    
-    /**
-     * 创建订单
-     */
-    OrderAggregate createOrder(OrderCommandEntity command) throws Exception;
+/** 1. 定义服务接口 */
+public interface ITradeLockOrderService {
+    MarketPayOrderEntity lockMarketPayOrder(UserEntity user, PayActivityEntity activity, PayDiscountEntity discount) throws Exception;
 }
 
-// 2. 实现服务类（放在子包中）
-@Service
-@Slf4j
-public class OrderDomainServiceImpl implements IOrderDomainService {
+/** 2. 实现服务（放在子包中） */
+@Slf4j @Service
+public class TradeLockOrderService implements ITradeLockOrderService {
 
-    @Resource
-    private IOrderRepository orderRepository;
+    @Resource private ITradeRepository repository;
+    @Resource private BusinessLinkedList<TradeLockRuleCommandEntity, TradeLockRuleFilterFactory.DynamicContext, TradeLockRuleFilterBackEntity> tradeRuleFilter;
 
     @Override
-    public OrderAggregate queryById(Long orderId) {
-        log.info("查询订单 orderId:{}", orderId);
-        return orderRepository.findById(orderId);
-    }
+    public MarketPayOrderEntity lockMarketPayOrder(UserEntity userEntity, PayActivityEntity payActivityEntity, PayDiscountEntity payDiscountEntity) throws Exception {
+        log.info("锁定营销优惠支付订单:{} activityId:{}", userEntity.getUserId(), payActivityEntity.getActivityId());
 
-    @Override
-    public OrderAggregate createOrder(OrderCommandEntity command) throws Exception {
-        log.info("创建订单 userId:{} activityId:{}", command.getUserId(), command.getActivityId());
-        
-        // 1. 构建聚合根
-        OrderAggregate aggregate = OrderAggregate.builder()
-                .orderEntity(OrderEntity.builder()
-                        .userId(command.getUserId())
-                        .activityId(command.getActivityId())
-                        .status(OrderStatus.PENDING)
-                        .build())
+        // 1. 交易规则过滤（责任链）
+        TradeLockRuleFilterBackEntity back = tradeRuleFilter.apply(TradeLockRuleCommandEntity.builder()
+                .activityId(payActivityEntity.getActivityId())
+                .userId(userEntity.getUserId())
+                .teamId(payActivityEntity.getTeamId()).build(),
+                new TradeLockRuleFilterFactory.DynamicContext());
+
+        // 2. 构建聚合对象
+        GroupBuyOrderAggregate aggregate = GroupBuyOrderAggregate.builder()
+                .userEntity(userEntity)
+                .payActivityEntity(payActivityEntity)
+                .payDiscountEntity(payDiscountEntity)
+                .userTakeOrderCount(back.getUserTakeOrderCount())
                 .build();
-        
-        // 2. 执行创建（调用聚合根内部方法）
-        aggregate.create();
-        
-        // 3. 保存
-        orderRepository.save(aggregate);
-        
-        return aggregate;
+
+        // 3. 锁定聚合订单
+        return repository.lockMarketPayOrder(aggregate);
     }
 }
 ```
 
-#### 2. 策略模式服务
+### 策略模式实现
 
 ```java
-// 1. 定义策略接口
+/** 1. 策略接口 */
 public interface IRefundOrderStrategy {
-    void refundOrder(RefundCommandEntity command) throws Exception;
+    void refundOrder(TradeRefundOrderEntity entity) throws Exception;
+    void reverseStock(TeamRefundSuccess success) throws Exception;
 }
 
-// 2. 定义抽象基类（模板方法模式）
+/** 2. 抽象基类（模板方法） */
 @Slf4j
 public abstract class AbstractRefundOrderStrategy implements IRefundOrderStrategy {
+    @Resource protected ITradeRepository repository;
+    @Resource protected ThreadPoolExecutor threadPoolExecutor;
 
-    @Resource
-    protected IOrderRepository orderRepository;
-
-    @Resource
-    protected ThreadPoolExecutor threadPoolExecutor;
-
-    /**
-     * 通用库存恢复逻辑
-     */
-    protected void doReverseStock(ReverseStockVO vo) throws Exception {
-        log.info("恢复库存 activityId:{} teamId:{}", vo.getActivityId(), vo.getTeamId());
-        orderRepository.reverseStock(vo);
+    protected void doReverseStock(TeamRefundSuccess s, String type) throws Exception {
+        log.info("退单恢复锁单量 - {}", type);
+        repository.refund2AddRecovery(s.getActivityId() + ":" + s.getTeamId(), s.getOrderId());
     }
 }
 
-// 3. 实现具体策略
-@Slf4j
-@Service("paid2RefundStrategy")
+/** 3. 具体策略 */
+@Slf4j @Service("paid2RefundStrategy")
 public class Paid2RefundStrategy extends AbstractRefundOrderStrategy {
-
     @Override
-    public void refundOrder(RefundCommandEntity command) throws Exception {
-        log.info("退单-已支付 userId:{} teamId:{}", command.getUserId(), command.getTeamId());
-        // 已支付退单逻辑：减库存、减完成量、发MQ
-        orderRepository.paidRefund(command);
+    public void refundOrder(TradeRefundOrderEntity e) throws Exception {
+        log.info("退单-已支付，未成团 userId:{}", e.getUserId());
+        NotifyTaskEntity n = repository.paid2Refund(GroupBuyRefundAggregate.buildPaid2RefundAggregate(e, -1, -1));
+        if (n != null) threadPoolExecutor.execute(() -> tradeTaskService.execNotifyJob(n));
     }
-}
-
-@Slf4j
-@Service("unpaid2RefundStrategy")
-public class Unpaid2RefundStrategy extends AbstractRefundOrderStrategy {
-
     @Override
-    public void refundOrder(RefundCommandEntity command) throws Exception {
-        log.info("退单-未支付 userId:{} teamId:{}", command.getUserId(), command.getTeamId());
-        // 未支付退单逻辑：只减库存
-        orderRepository.unpaidRefund(command);
-    }
-}
-```
-
-#### 3. 责任链模式服务
-
-```java
-// 1. 定义过滤器接口
-public interface IOrderRuleFilter {
-    FilterResult doFilter(FilterCommandEntity command, DynamicContext context);
-}
-
-// 2. 实现多个过滤器
-@Slf4j
-@Service
-public class ActivityStatusFilter implements IOrderRuleFilter {
-    
-    @Override
-    public FilterResult doFilter(FilterCommandEntity command, DynamicContext context) {
-        log.info("规则校验-活动状态 activityId:{}", command.getActivityId());
-        // 校验逻辑
-        return FilterResult.builder().passed(true).build();
-    }
-}
-
-@Slf4j
-@Service
-public class StockFilter implements IOrderRuleFilter {
-    
-    @Override
-    public FilterResult doFilter(FilterCommandEntity command, DynamicContext context) {
-        log.info("规则校验-库存校验 activityId:{}", command.getActivityId());
-        // 校验逻辑
-        return FilterResult.builder().passed(true).build();
-    }
-}
-
-// 3. 过滤器工厂
-@Slf4j
-@Service
-public class OrderRuleFilterFactory {
-
-    @Resource
-    private ActivityStatusFilter activityStatusFilter;
-
-    @Resource
-    private StockFilter stockFilter;
-
-    /**
-     * 执行过滤器链
-     */
-    public FilterResult execute(FilterCommandEntity command) {
-        FilterResult result = activityStatusFilter.doFilter(command, null);
-        if (!result.isPassed()) return result;
-        
-        result = stockFilter.doFilter(command, null);
-        return result;
+    public void reverseStock(TeamRefundSuccess s) throws Exception {
+        doReverseStock(s, "已支付，但有锁单记录，恢复锁单库存");
     }
 }
 ```
