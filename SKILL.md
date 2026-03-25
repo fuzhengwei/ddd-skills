@@ -27,52 +27,72 @@ Design and implement software using Domain-Driven Design with Hexagonal Architec
 
 ### 创建 DDD 项目
 
-当用户需要创建新的 DDD 项目时，**必须先询问用户以下配置参数**，用户确认或给出具体值后再执行 Maven Archetype 命令。
+当用户说"创建 DDD 项目"、"新建项目"、"创建项目"、"创建ddd项目"时，**必须使用 `scripts/create-ddd-project.sh` 脚本**。
 
-**必须询问的参数：**
+**脚本支持系统**: Windows (Git Bash/MSYS2)、Mac (macOS)、Linux，自动检测并适配。
 
-| 参数 | 说明 | 默认值（用户不提供时使用） | 示例 |
-|------|------|---------------------------|------|
-| GroupId | Maven 坐标的 groupId，用于标识组织或公司 | `com.yourcompany` | `cn.bugstack` |
-| ArtifactId | 项目模块的唯一标识名称 | `your-project-name` | `order-system` |
-| Version | 项目的版本号 | `1.0.0-SNAPSHOT` | `1.0.0-RELEASE` |
-| Package | Java 代码的根包名（默认同 groupId） | 同 groupId | `cn.bugstack.order` |
+**⚠️ 环境提醒**: 建议提前安装 JDK 17+ 和 Maven 3.8.*，脚本启动时会自动检测并给出各平台安装指引，未安装也可继续但可能导致生成失败。
 
-**流程：**
-1. 询问用户上述参数（GroupId、ArtifactId 必须询问，Version 和 Package 可选）
-2. 用户确认具体值后，执行 Maven Archetype 命令
-3. 用户未提供时，使用默认值
+**⚠️ 重要提醒：必须询问用户项目创建地址**
 
-> ⚠️ **禁止直接使用默认值创建项目，必须先询问用户确认**
+**在创建项目前，如果用户没有明确给出工程创建地址，必须询问用户在哪里创建项目。** 不能随意创建到默认目录，必须获得用户确认。
 
-**Maven Archetype 命令模板：**
+示例对话：
+```
+用户：帮我创建一个 DDD 项目
+AI：好的，我来帮您创建 DDD 项目。请问您希望将项目创建在哪个目录？
+     例如：
+     1) /Users/xxx/projects
+     2) /Users/xxx/Documents
+     3) /home/xxx/workspace
+     4) 其他路径（请直接输入）
 
-```bash
-mvn archetype:generate \
-  -DarchetypeGroupId=io.github.fuzhengwei \
-  -DarchetypeArtifactId=ddd-scaffold-lite-jdk17 \
-  -DarchetypeVersion=1.3 \
-  -DarchetypeRepository=https://maven.xiaofuge.cn/ \
-  -DgroupId={用户输入或默认值} \
-  -DartifactId={用户输入或默认值} \
-  -Dversion={用户输入或默认值} \
-  -Dpackage={用户输入或默认值} \
-  -B
+用户：创建在 /Users/xxx/projects 下
+AI：确认在 /Users/xxx/projects 下创建项目，开始执行...
 ```
 
-**参数说明：**
+**流程:**
 
-| 参数 | 用途 |
-|------|------|
-| `-DarchetypeGroupId` | 脚手架模板的 groupId |
-| `-DarchetypeArtifactId` | 脚手架模板名称 |
-| `-DarchetypeVersion` | 脚手架版本 |
-| `-DarchetypeRepository` | Maven 私服地址 |
-| `-DgroupId` | 项目组织标识 |
-| `-DartifactId` | 项目名称 |
-| `-Dversion` | 项目版本 |
-| `-Dpackage` | Java 根包名 |
-| `-B` | 批量模式，不交互 |
+1. **第一步：确认项目创建目录**
+
+   **必须询问用户**，如果用户未指定，列出可选项供用户选择。
+
+   示例：
+   ```
+   📂 选择项目生成目录
+   ──────────────────────────────
+   1) /Users/xxx/projects
+   2) /Users/xxx/Documents
+   3) /home/xxx/workspace
+   4) 自定义路径（直接输入路径）
+
+   直接回车 = 选择 [1]
+   ```
+
+2. **第二步：填写项目配置**（逐一询问，直接回车使用默认值）
+
+   | 参数 | 说明 | 默认值 | 示例 |
+   |------|------|--------|------|
+   | GroupId | Maven 坐标 groupId，标识组织或公司 | `com.yourcompany` | `cn.bugstack` |
+   | ArtifactId | 项目模块唯一标识名称 | `your-project-name` | `order-system` |
+   | Version | 项目版本号 | `1.0.0-SNAPSHOT` | `1.0.0-RELEASE` |
+   | Package | Java 代码根包名 | 自动从 GroupId + ArtifactId 推导 | `cn.bugstack.order` |
+   | Archetype 版本 | 脚手架模板版本 | `1.3` | - |
+
+3. **第三步：确认并生成**
+
+   显示所有配置，确认后执行 Maven Archetype 生成项目。
+
+**脚本执行方式**（在 `ddd-skills-v2` 项目根目录下运行）:
+```bash
+bash scripts/create-ddd-project.sh
+```
+
+> ⚠️ **必须先 cd 到 `ddd-skills-v2` 项目目录下再执行**，脚本会自动定位自身路径。
+> AI 负责引导用户选择目录、填写参数，无需手动拼凑 Maven 命令。
+> **⚠️ 再次强调：创建项目前必须询问用户项目创建地址，不能随意创建！**
+
+---
 
 ## Quick Reference
 
@@ -270,6 +290,8 @@ public class OrderController {
 ### Domain Service - 完整编码规范
 
 **参考真实工程**：`Documents/project/ddd-demo/group-buy-market`、`Documents/project/ddd-demo/ai-mcp-gateway`
+
+Domain Service 用于封装跨多个聚合根的业务逻辑，或不适合放在单个实体/聚合根上的操作。实现类按子包组织（`service/license/`、`service/lock/` 等），支持策略模式、责任链模式等设计模式。
 
 #### 1. 简单领域服务
 
