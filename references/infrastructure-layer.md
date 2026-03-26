@@ -13,19 +13,19 @@
 {infrastructure-module}/
 ├── adapter/                              # 适配器实现
 │   ├── port/                             # Port 实现（远程调用）
-│   │   └── XxxPort.java
+│   │   └── XxxPort.java                  # 实现领域层定义的 IPort 接口，调用 gateway
 │   └── repository/                       # Repository 实现（本地数据）
-│       └── XxxRepository.java
-├── dao/                                  # MyBatis DAO 接口
-│   ├── po/                               # Persistence Object
+│       └── XxxRepository.java            # 实现领域层定义的 IRepository 接口，调用 dao/redis
+├── dao/                                  # MyBatis DAO 接口和 PO 对象
+│   ├── po/                               # Persistence Object（数据库映射对象）
 │   │   └── XxxPO.java
-│   └── IXxxDao.java
+│   └── IXxxDao.java                      # DAO 接口，操作数据库
 ├── gateway/                              # HTTP / RPC 客户端
 │   ├── dto/                              # 远程调用 DTO
 │   │   ├── XxxRequestDTO.java
 │   │   └── XxxResponseDTO.java
 │   └── XxxGateway.java                   # HTTP 服务客户端
-├── redis/                                # Redis 配置
+├── redis/                                # Redis 配置和工具
 └── config/                               # 配置类
 
 {app-module}/src/main/resources/
@@ -34,17 +34,23 @@
         └── xxx_mapper.xml
 ```
 
+**重要规范说明：**
+- **dao 包**：包含 PO 对象和 DAO 接口，直接操作数据库（MyBatis）
+- **adapter/repository 包**：实现领域层定义的 Repository 接口，内部调用 dao、redis 等完成数据持久化
+- **adapter/port 包**：实现领域层定义的 Port 接口，内部调用 gateway 完成远程服务调用
+- **禁止**使用 `persistent` 包，Repository 实现必须放在 `adapter/repository` 下
+
 ## 目录职责
 
-| 目录 | 职责 | 技术栈 |
-|------|------|--------|
-| `adapter/repository/` | Repository 实现 | MySQL + Redis |
-| `adapter/port/` | Port 实现 | HTTP + RPC |
-| `dao/` | DAO 接口 | MyBatis Mapper |
-| `dao/po/` | PO 对象 | 数据库映射 |
-| `gateway/` | HTTP/RPC 客户端 | OkHttp / Retrofit |
-| `gateway/dto/` | 远程调用 DTO | JSON 序列化 |
-| `mybatis/mapper/` | Mapper XML | MyBatis XML |
+| 目录 | 职责 | 技术栈 | 说明 |
+|------|------|--------|------|
+| `adapter/repository/` | Repository 实现 | MySQL + Redis | 实现领域层 IRepository 接口，调用 dao/redis |
+| `adapter/port/` | Port 实现 | HTTP + RPC | 实现领域层 IPort 接口，调用 gateway |
+| `dao/` | DAO 接口 | MyBatis Mapper | 定义数据库操作方法 |
+| `dao/po/` | PO 对象 | 数据库映射 | 与数据库表字段一一对应 |
+| `gateway/` | HTTP/RPC 客户端 | OkHttp / Retrofit | 远程服务调用客户端 |
+| `gateway/dto/` | 远程调用 DTO | JSON 序列化 | 远程请求/响应数据传输对象 |
+| `mybatis/mapper/` | Mapper XML | MyBatis XML | SQL 映射配置文件 |
 
 ## DAO 与 PO
 

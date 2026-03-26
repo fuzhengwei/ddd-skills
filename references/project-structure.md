@@ -37,15 +37,15 @@
 │   ├── pom.xml
 │   └── src/main/java/
 │       └── cn/{company}/infrastructure/
-│           ├── adapter/                        # ⭐ 适配器实现
+│           ├── adapter/                        # ⭐ 适配器实现（实现领域层定义的接口）
 │           │   ├── port/                       # Port 实现（远程调用）
-│           │   │   └── XxxPort.java           # HTTP / RPC / WebSocket
+│           │   │   └── XxxPort.java           # 实现领域层 IPort，调用 gateway
 │           │   └── repository/                 # Repository 实现（本地数据）
-│           │       └── XxxRepository.java     # MySQL + Redis
-│           ├── dao/                            # ⭐ MyBatis DAO 接口
+│           │       └── XxxRepository.java     # 实现领域层 IRepository，调用 dao/redis
+│           ├── dao/                            # ⭐ MyBatis DAO 接口和 PO 对象
 │           │   ├── po/                         # ⭐ PO 对象（数据库映射）
 │           │   │   └── XxxPO.java
-│           │   └── IXxxDao.java
+│           │   └── IXxxDao.java               # DAO 接口，直接操作数据库
 │           ├── gateway/                       # ⭐ HTTP/RPC 客户端
 │           │   ├── dto/                        # ⭐ 远程调用 DTO
 │           │   │   ├── XxxRequestDTO.java
@@ -95,15 +95,21 @@
 
 ## Infrastructure 层职责
 
-| 目录 | 职责 | 技术栈 |
-|------|------|--------|
-| `adapter/repository/` | 实现 Repository 接口 | MySQL + Redis |
-| `adapter/port/` | 实现 Port 接口 | HTTP + RPC |
-| `dao/` | MyBatis DAO 接口 | MyBatis Mapper |
-| `dao/po/` | PO 对象（数据库映射） | Java Bean |
-| `gateway/` | HTTP/RPC 客户端 | OkHttp / Retrofit |
-| `gateway/dto/` | 远程调用 DTO | JSON 序列化 |
-| `mybatis/mapper/` | Mapper XML 文件 | MyBatis XML |
+| 目录 | 职责 | 技术栈 | 依赖关系 |
+|------|------|--------|----------|
+| `adapter/repository/` | 实现领域层 Repository 接口 | MySQL + Redis | 调用 dao、redis |
+| `adapter/port/` | 实现领域层 Port 接口 | HTTP + RPC | 调用 gateway |
+| `dao/` | MyBatis DAO 接口 | MyBatis Mapper | 直接操作数据库 |
+| `dao/po/` | PO 对象（数据库映射） | Java Bean | 与表字段一一对应 |
+| `gateway/` | HTTP/RPC 客户端 | OkHttp / Retrofit | 远程服务调用 |
+| `gateway/dto/` | 远程调用 DTO | JSON 序列化 | 请求/响应数据 |
+| `mybatis/mapper/` | Mapper XML 文件 | MyBatis XML | SQL 配置 |
+
+**规范说明：**
+- **dao 包**：包含 PO 对象和 DAO 接口类，直接操作数据库
+- **adapter/repository**：实现领域层定义的 Repository 接口，内部组合使用 dao、redis 等完成数据持久化
+- **adapter/port**：实现领域层定义的 Port 接口，内部调用 gateway 完成远程服务调用
+- **禁止**使用 `persistent` 包，Repository 实现必须放在 `adapter/repository` 下
 
 ## DAO 与 PO 规范
 
