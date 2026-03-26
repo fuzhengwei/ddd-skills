@@ -1,10 +1,11 @@
 ---
 name: xfg-ddd-skills
-version: 2.1.0
-description: "DDD 六边形架构设计与开发技能包。包含：领域层设计（Aggregate/Entity/CommandEntity/ValueObject/EnumVO）、Domain Service（策略模式/责任链模式/模板方法）、Repository、Port适配器、Case编排层、Trigger触发层、Infrastructure基础设施层。参考 group-buy-market 真实工程规范。触发词：'DDD'、'六边形架构'、'领域驱动设计'、'创建 DDD 项目'、'新建项目'。不要用于简单 CRUD 应用或没有领域复杂度的微服务。@小傅哥"
+version: 2.2.0
+description: "DDD 六边形架构设计与开发技能包。包含：领域层设计（Aggregate/Entity/CommandEntity/ValueObject/EnumVO）、Domain Service（策略模式/责任链模式/模板方法）、Repository、Port适配器、Case编排层、Trigger触发层、Infrastructure基础设施层。DevOps 部署支持：Dockerfile 打包、docker-compose 环境部署（MySQL/Redis/RabbitMQ）、应用启动停止脚本、阿里云镜像加速。参考 ai-mcp-gateway 真实工程规范。触发词：'DDD'、'六边形架构'、'部署'、'deploy'、'Docker'、'发布'、'上线'、'创建 DDD 项目'。不要用于简单 CRUD 应用或没有领域复杂度的微服务。@小傅哥"
 author: xiaofuge
 license: MIT
 triggers:
+  # DDD 架构设计
   - "DDD"
   - "六边形架构"
   - "domain-driven design"
@@ -18,6 +19,27 @@ triggers:
   - "ValueObject"
   - "值对象"
   - "聚合根"
+  # DevOps 部署相关
+  - "部署"
+  - "deploy"
+  - "Docker"
+  - "docker-compose"
+  - "容器化"
+  - "发布"
+  - "上线"
+  - "打包"
+  - "build"
+  - "运维部署"
+  - "启动服务"
+  - "停止服务"
+  - "重启服务"
+  - "环境配置"
+  - "生产环境"
+  - "测试环境"
+  - "数据库部署"
+  - "MySQL"
+  - "Redis"
+  - "RabbitMQ"
 metadata:
   openclaw:
     emoji: "🏗️"
@@ -359,3 +381,420 @@ public class Paid2RefundStrategy extends AbstractRefundOrderStrategy {
 
 - [group-buy-market](file:///Users/fuzhengwei/Documents/project/ddd-demo/group-buy-market) - E-commerce domain
 - [ai-mcp-gateway](file:///Users/fuzhengwei/Documents/project/ddd-demo/ai-mcp-gateway) - API gateway domain
+
+---
+
+# 🚀 DevOps 部署完整流程
+
+## 📋 部署检查清单
+
+当用户需要部署 DDD 项目时，按照以下流程执行：
+
+### 1. 确认项目信息
+- [ ] 项目名称（artifactId）
+- [ ] 项目路径（代码根目录）
+- [ ] 部署环境（开发/测试/生产）
+- [ ] 基础依赖（MySQL/Redis/RabbitMQ）
+
+### 2. 打包构建
+```bash
+cd /path/to/project
+mvn clean package -Dmaven.test.skip=true
+```
+
+### 3. 基础镜像拉取（加速）
+```bash
+# 使用阿里云加速镜像
+docker pull registry.cn-hangzhou.aliyuncs.com/xfg-studio/openjdk:17-jdk-slim
+docker pull registry.cn-hangzhou.aliyuncs.com/xfg-studio/mysql:8.0.32
+docker pull registry.cn-hangzhou.aliyuncs.com/xfg-studio/redis:6.2
+```
+
+### 4. 数据库部署
+```bash
+cd docs/dev-ops
+docker-compose -f docker-compose-environment-aliyun.yml up -d mysql
+
+# 等待 MySQL 就绪后初始化数据库
+docker exec -it mysql mysql -uroot -p123456 -e "source /docker-entrypoint-initdb.d/xxx.sql"
+```
+
+### 5. 应用容器构建
+```bash
+cd ai-mcp-gateway-app
+docker build -t system/{artifactId}:1.0.0 .
+```
+
+### 6. 应用启动
+```bash
+cd docs/dev-ops
+docker-compose -f docker-compose-app.yml up -d
+```
+
+### 7. 验证部署
+```bash
+# 查看容器状态
+docker ps -a | grep {artifactId}
+
+# 查看应用日志
+docker logs -f {artifactId}
+
+# 健康检查
+curl http://localhost:{port}/actuator/health
+```
+
+---
+
+## 📁 标准部署目录结构
+
+```
+{project}/
+├── docs/
+│   └── dev-ops/
+│       ├── docker-compose-environment-aliyun.yml  # 基础环境（MySQL/Redis/RabbitMQ）
+│       ├── docker-compose-app.yml                  # 应用服务
+│       ├── mysql/
+│       │   ├── my.cnf                              # MySQL 配置
+│       │   └── sql/
+│       │       └── {project}.sql                  # 数据库初始化脚本
+│       ├── redis/
+│       │   └── redis.conf                          # Redis 配置
+│       ├── app/
+│       │   ├── start.sh                            # 启动脚本
+│       │   └── stop.sh                             # 停止脚本
+│       └── README.md                               # 部署说明
+├── {project}-app/
+│   ├── Dockerfile                                   # 应用 Dockerfile
+│   ├── pom.xml
+│   └── src/main/resources/
+│       ├── application.yml
+│       ├── application-dev.yml
+│       ├── application-test.yml
+│       ├── application-prod.yml
+│       └── logback-spring.xml
+```
+
+---
+
+## 🐳 Dockerfile 标准模板
+
+```dockerfile
+# 基础镜像
+FROM registry.cn-hangzhou.aliyuncs.com/xfg-studio/openjdk:17-jdk-slim
+
+# 作者
+MAINTAINER xiaofuge
+
+# 时区配置
+ENV TZ=PRC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# 添加应用 JAR
+ADD target/{artifactId}.jar /{artifactId}.jar
+
+# 暴露端口
+EXPOSE {port}
+
+# 启动命令
+ENTRYPOINT ["sh","-c","java -jar $JAVA_OPTS /{artifactId}.jar $PARAMS"]
+```
+
+---
+
+## 📦 docker-compose-app.yml 标准模板
+
+```yaml
+version: '3.8'
+
+services:
+  {artifactId}:
+    image: system/{artifactId}:1.0.0
+    container_name: {artifactId}
+    restart: on-failure
+    ports:
+      - "{port}:{port}"
+    environment:
+      - TZ=PRC
+      - SERVER_PORT={port}
+      - SPRING_PROFILES_ACTIVE=prod
+    volumes:
+      - ./logs:/data/log
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - my-network
+    depends_on:
+      - mysql
+      - redis
+
+networks:
+  my-network:
+    driver: bridge
+```
+
+---
+
+## 🗄️ docker-compose-environment-aliyun.yml 标准模板
+
+```yaml
+version: '3.9'
+
+services:
+  # MySQL 8.0
+  mysql:
+    image: registry.cn-hangzhou.aliyuncs.com/xfg-studio/mysql:8.0.32
+    container_name: mysql
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: 123456
+    ports:
+      - "13306:3306"
+    volumes:
+      - ./mysql/my.cnf:/etc/mysql/conf.d/mysql.cnf:ro
+      - ./mysql/sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+    networks:
+      - my-network
+
+  # phpMyAdmin（可选）
+  phpmyadmin:
+    image: registry.cn-hangzhou.aliyuncs.com/xfg-studio/phpmyadmin:5.2.1
+    container_name: phpmyadmin
+    ports:
+      - "8899:80"
+    environment:
+      - PMA_HOST=mysql
+      - PMA_PORT=3306
+      - MYSQL_ROOT_PASSWORD=123456
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - my-network
+
+  # Redis
+  redis:
+    image: registry.cn-hangzhou.aliyuncs.com/xfg-studio/redis:6.2
+    container_name: redis
+    restart: always
+    ports:
+      - "16379:6379"
+    networks:
+      - my-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Redis Commander（可选）
+  redis-admin:
+    image: registry.cn-hangzhou.aliyuncs.com/xfg-studio/redis-commander:0.8.0
+    container_name: redis-admin
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - my-network
+
+networks:
+  my-network:
+    driver: bridge
+```
+
+---
+
+## 🚀 快速启动/停止脚本
+
+### start.sh
+```bash
+#!/bin/bash
+
+CONTAINER_NAME={artifactId}
+IMAGE_NAME=system/{artifactId}:1.0.0
+PORT={port}
+
+echo "容器部署开始 ${CONTAINER_NAME}"
+
+# 停止容器
+docker stop ${CONTAINER_NAME}
+
+# 删除容器
+docker rm ${CONTAINER_NAME}
+
+# 启动容器
+docker run --name ${CONTAINER_NAME} \
+  --network my-network \
+  -p ${PORT}:${PORT} \
+  -e SPRING_PROFILES_ACTIVE=prod \
+  -v $(pwd)/logs:/data/log \
+  -d ${IMAGE_NAME}
+
+echo "容器部署成功 ${CONTAINER_NAME}"
+
+# 查看日志
+docker logs -f ${CONTAINER_NAME}
+```
+
+### stop.sh
+```bash
+#!/bin/bash
+
+CONTAINER_NAME={artifactId}
+
+echo "停止容器 ${CONTAINER_NAME}"
+docker stop ${CONTAINER_NAME}
+docker rm ${CONTAINER_NAME}
+
+echo "容器已停止"
+```
+
+---
+
+## 🔧 application-prod.yml 标准配置
+
+```yaml
+server:
+  port: {port}
+
+spring:
+  application:
+    name: {artifactId}
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:mysql}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:{database}}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:123456}
+    hikari:
+      pool-name: {artifactId}-hikari
+      minimum-idle: 10
+      maximum-pool-size: 50
+      idle-timeout: 300000
+      connection-timeout: 30000
+      max-lifetime: 1800000
+  redis:
+    host: ${REDIS_HOST:redis}
+    port: ${REDIS_PORT:6379}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:admin}
+    password: ${RABBITMQ_PASSWORD:admin123}
+
+logging:
+  level:
+    root: INFO
+    cn.bugstack: INFO
+  file:
+    name: /data/log/{artifactId}.log
+```
+
+---
+
+## 📊 阿里云镜像加速仓库
+
+所有镜像已同步到阿里云，使用前缀 `registry.cn-hangzhou.aliyuncs.com/xfg-studio/`
+
+| 镜像 | 用途 |
+|------|------|
+| openjdk:17-jdk-slim | Java 17 运行环境 |
+| mysql:8.0.32 | MySQL 8.0 数据库 |
+| redis:6.2 | Redis 缓存 |
+| redis:7.2 | Redis 7.x |
+| redis-commander:0.8.0 | Redis 可视化管理 |
+| phpmyadmin:5.2.1 | MySQL 可视化管理 |
+| rabbitmq:3.12.9 | RabbitMQ 消息队列 |
+| nacos-server:v2.2.3-slim | Nacos 注册中心 |
+
+---
+
+## ⚠️ 常见问题处理
+
+### 1. MySQL 8.0 认证问题
+```bash
+docker exec mysql mysql -uroot -p123456 -e "ALTER USER 'root'@'%' IDENTIFIED WITH mysql_native_password BY '123456'; FLUSH PRIVILEGES;"
+```
+
+### 2. 容器网络不通
+确保所有容器在同一个网络：
+```yaml
+networks:
+  - my-network
+```
+
+### 3. 端口冲突
+修改 docker-compose.yml 中的端口映射：
+```yaml
+ports:
+  - "13306:3306"  # 改为非标准端口
+```
+
+### 4. 应用无法连接数据库
+检查环境变量配置和健康检查依赖：
+```yaml
+depends_on:
+  mysql:
+    condition: service_healthy
+```
+
+---
+
+## 📝 部署操作流程示例
+
+当用户说"帮我部署 ai-mcp-gateway"时，执行：
+
+1. **确认项目信息**
+   - 项目路径：`/Users/fuzhengwei/Documents/project/ddd-demo/ai-mcp-gateway`
+   - 端口：`8091`
+   - 镜像：`system/ai-mcp-gateway:1.0.0`
+
+2. **执行部署**
+```bash
+# 进入项目目录
+cd /Users/fuzhengwei/Documents/project/ddd-demo/ai-mcp-gateway
+
+# 打包
+mvn clean package -Dmaven.test.skip=true
+
+# 构建 Docker 镜像
+cd ai-mcp-gateway-app
+docker build -t system/ai-mcp-gateway:1.0.0 .
+
+# 部署基础环境
+cd ../docs/dev-ops
+docker-compose -f docker-compose-environment-aliyun.yml up -d
+
+# 等待 MySQL 就绪
+sleep 30
+
+# 初始化数据库
+docker exec -i mysql mysql -uroot -p123456 < mysql/sql/ai_mcp_gateway_v2.sql
+
+# 启动应用
+docker-compose -f docker-compose-app.yml up -d
+
+# 验证
+docker ps | grep ai-mcp-gateway
+curl http://localhost:8091/api/gateway/list
+```
+
+3. **部署完成检查**
+   - 容器状态正常
+   - 日志无报错
+   - 健康检查通过
