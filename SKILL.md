@@ -134,6 +134,7 @@ bash scripts/create-ddd-project.sh
 | Case layer orchestration | [references/case-layer.md](references/case-layer.md) |
 | Trigger layer | [references/trigger-layer.md](references/trigger-layer.md) |
 | Infrastructure layer | [references/infrastructure-layer.md](references/infrastructure-layer.md) |
+| **Domain 层设计指南（避免常见错误）** | **[references/domain-design-guide.md](references/domain-design-guide.md)** |
 | **Domain 层核心模式** | **[references/domain-patterns.md](references/domain-patterns.md)** |
 | **Infrastructure 层核心模式** | **[references/infrastructure-patterns.md](references/infrastructure-patterns.md)** |
 | **DevOps 部署** | **[references/devops-deployment.md](references/devops-deployment.md)** |
@@ -171,6 +172,30 @@ bash scripts/create-ddd-project.sh
 ```
 
 **Dependency Rule**: `Trigger → API → Case → Domain ← Infrastructure`
+
+## ⚠️ Domain 层设计自检清单
+
+在生成 Domain 层代码前，必须逐项检查：
+
+**1. 是否有多种处理方式（if-else 判断类型）？**
+→ 是：使用**策略模式**（`IXxxStrategy` 接口 + 实现类 + `Map<String, IXxxStrategy>` 注入）
+
+**2. 是否有多个独立的校验/过滤步骤（3步以上）？**
+→ 是：使用**责任链模式**（`IXxxFilter` 接口 + Factory 组装链）
+
+**3. Service 方法是否超过 60 行？**
+→ 是：拆分为过滤器（校验）+ 策略（执行）+ 私有方法（保存）
+
+**4. Infrastructure 层是否包含业务判断逻辑？**
+→ 是：将业务校验移到 Domain 层的过滤器中，Infrastructure 只做数据读写
+
+**5. 是否跨域直接依赖另一个 Domain 的 Repository？**
+→ 是：通过 Case 层编排，或在本域 Repository 接口中聚合所需数据
+
+**6. Infrastructure 包名是否正确？**
+→ Repository 实现：`adapter/repository/`（❌ 不是 `persistent/repository/`）
+→ DAO 操作：`dao/`（❌ 不是 `scenario/dao/` 或其他包）
+→ Redis 操作：`redis/`（❌ 不是 `config/`）
 
 ## Domain Layer 目录结构
 
