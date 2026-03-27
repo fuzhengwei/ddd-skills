@@ -188,6 +188,446 @@ model/
 
 **⚠️ 注意**：`model/` 下没有单独的 `command/` 包，命令实体统一放在 `entity/` 包下。
 
+---
+
+## 📦 新功能开发规范
+
+当用户需要增加新功能时，按照以下决策流程进行开发：
+
+### 决策流程图
+
+```
+用户需要新功能
+        │
+        ▼
+┌───────────────────┐
+│ 检查现有领域服务   │ ──是──→ 扩展现有 Service
+│ domain/xxx/service│
+│ 是否有支持？      │
+└─────────┬─────────┘
+          │否
+          ▼
+┌───────────────────┐
+│ 创建新的领域？     │ ──是──→ 创建新领域（完整结构）
+│ domain/xxx/       │
+│                   │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│ Case 层是否需要？  │ ──是──→ 创建 Case 层编排
+│ 业务复杂？多领域？  │
+└─────────┬─────────┘
+          │否（轻量工程）
+          ▼
+┌───────────────────┐
+│ Trigger 直接调用   │ ←── Trigger → Domain
+│ Domain 领域层     │
+└───────────────────┘
+```
+
+### 决策指南
+
+| 问题 | 答案 | 处理方式 |
+|------|------|----------|
+| 现有领域能否支持新功能？ | ✅ 是 | 在现有 Service 中添加方法 |
+| 是否需要跨多个领域？ | ✅ 是 | 创建 Case 层编排 |
+| 业务逻辑是否复杂？ | ✅ 是 | 创建 Case 层编排 |
+| 是否是轻量工程？ | ✅ 是 | Trigger 直接调用 Domain |
+| Trigger 是否越来越复杂？ | ✅ 是 | 询问用户是否创建 Case 层 |
+
+---
+
+### 场景一：扩展现有领域服务
+
+**判断条件**：新功能属于现有领域的业务范围。
+
+**开发步骤**：
+
+1. **检查现有领域服务**
+   - 查看 `domain/{domain}/service/` 目录
+   - 确认是否有相关的 Service 接口
+
+2. **扩展现有 Service**
+   - 在现有接口中添加新方法
+   - 在实现类中实现新方法
+
+**示例**：在交易域添加一个"查询订单列表"功能
+
+```java
+// 1. 在现有接口中添加方法
+public interface ITradeRepository {
+    // 现有方法...
+    
+    // 新增：查询订单列表
+    List<MarketPayOrderEntity> queryOrderList(QueryOrderRequest request);
+}
+
+// 2. 在实现类中实现
+@Repository
+public class TradeRepository implements ITradeRepository {
+    
+    @Resource
+    private IMcpGatewayDao mcpGatewayDao;
+    
+    @Override
+    public List<MarketPayOrderEntity> queryOrderList(QueryOrderRequest request) {
+        // 实现查询逻辑
+    }
+}
+```
+
+---
+
+### 场景二：创建新的领域
+
+**判断条件**：新功能涉及全新的业务领域，与现有领域无关。
+
+**开发步骤**：
+
+1. **创建完整的领域结构**
+   ```
+   domain/
+   └── {new-domain}/                    # 新领域
+       ├── adapter/                    # 适配器接口
+       │   ├── port/                  # 端口接口
+       │   │   └── I{Xxx}Port.java
+       │   └── repository/            # 仓储接口
+       │       └── I{Xxx}Repository.java
+       ├── model/                     # 领域模型
+       │   ├── aggregate/            # 聚合根
+       │   ├── entity/               # 实体
+       │   └── valobj/               # 值对象
+       └── service/                   # 领域服务
+           ├── I{Xxx}Service.java     # 服务接口
+           └── {能力}/
+               └── {Xxx}ServiceImpl.java
+   ```
+
+2. **定义 Adapter 接口**
+   ```java
+   // Repository 接口
+   public interface I{Xxx}Repository {
+       XxxEntity queryById(Long id);
+       void save(XxxEntity entity);
+   }
+   
+   // Port 接口
+   public interface I{Xxx}Port {
+       void notify(XxxEntity entity) throws Exception;
+   }
+   ```
+
+3. **定义 Model**
+   ```java
+   // 实体
+   @Data
+   public class XxxEntity {
+       private Long id;
+       private String name;
+   }
+   
+   // 值对象
+   @Getter
+   public enum XxxStatusEnumVO {
+       CREATED("created", "已创建"),
+       PROCESSING("processing", "处理中"),
+       COMPLETED("completed", "已完成");
+       private String code;
+       private String info;
+   }
+   ```
+
+4. **实现 Service**
+   ```java
+   public interface I{Xxx}Service {
+       void process(XxxEntity entity) throws Exception;
+   }
+   
+   @Slf4j
+   @Service
+   public class XxxServiceImpl implements I{Xxx}Service {
+       
+       @Resource
+       private I{Xxx}Repository repository;
+       
+       @Resource
+       private I{Xxx}Port port;
+       
+       @Override
+       public void process(XxxEntity entity) throws Exception {
+           log.info("处理业务:{}", entity.getId());
+           // 业务逻辑
+           repository.save(entity);
+           port.notify(entity);
+       }
+   }
+   ```
+
+---
+
+### 场景三：创建 Case 层
+
+**判断条件**：业务涉及多个领域协作，或需要编排多个领域服务。
+
+**开发步骤**：
+
+1. **创建 Case 模块结构**
+   ```
+   case/
+   └── {domain}/
+       └── {capability}/
+           ├── I{Xxx}Case.java           # Case 接口
+           └── impl/
+               └── {Xxx}CaseImpl.java    # Case 实现
+   ```
+
+2. **定义 Case 接口**
+   ```java
+   /**
+    * XXX 业务编排接口
+    * 
+    * 职责：编排多个领域服务，完成复杂业务场景
+    */
+   public interface I{Xxx}Case {
+       
+       /**
+        * 执行 XXX 业务
+        */
+       void execute(XxxRequest request) throws Exception;
+   }
+   ```
+
+3. **实现 Case 编排**
+   ```java
+   /**
+    * XXX 业务编排实现
+    * 
+    * @author xiaofuge
+    */
+   @Slf4j
+   @Service
+   public class XxxCaseImpl implements I{Xxx}Case {
+       
+       @Resource
+       private IDomain1Service domain1Service;
+       
+       @Resource
+       private IDomain2Service domain2Service;
+       
+       @Override
+       public void execute(XxxRequest request) throws Exception {
+           log.info("执行 XXX 业务");
+           
+           // 1. 调用领域服务1
+           Domain1Result r1 = domain1Service.method1(request.getParam1());
+           
+           // 2. 调用领域服务2
+           domain2Service.method2(r1.getData());
+           
+           // 3. 组装结果
+           // ...
+       }
+   }
+   ```
+
+**Case 层命名规范**：
+- 接口命名：`I{Xxx}Case`
+- 实现类命名：`{Xxx}CaseImpl`
+
+---
+
+### 场景四：Trigger 直接调用 Domain
+
+**判断条件**：轻量工程，业务简单，不需要 Case 层编排。
+
+**开发步骤**：
+
+1. **在 Trigger 层直接调用 Domain**
+   ```java
+   @RestController
+   @RequestMapping("/api/xxx")
+   public class XxxController {
+       
+       @Resource
+       private I{Xxx}Service xxxService;
+       
+       @PostMapping("/process")
+       public Response<XxxResponse> process(@RequestBody XxxRequest request) {
+           try {
+               xxxService.process(request.toEntity());
+               return Response.success();
+           } catch (Exception e) {
+               return Response.fail(e.getMessage());
+           }
+       }
+   }
+   ```
+
+2. **Trigger 层职责**
+   - 接收请求参数
+   - 参数校验
+   - 调用 Domain 层
+   - 处理异常
+   - 返回响应
+
+---
+
+### 场景五：Trigger 复杂化后重构为 Case 层
+
+**判断条件**：Trigger 层代码越来越复杂，包含大量业务逻辑。
+
+**警告信号**：
+- Controller 代码超过 100 行
+- Controller 中有大量 if-else 判断
+- Controller 依赖多个 Domain Service
+- 业务逻辑难以测试
+
+**重构步骤**：
+
+1. **询问用户**
+   ```
+   AI：检测到 Trigger 层代码比较复杂，是否需要创建 Case 层来分摊业务逻辑？
+       这样可以：
+       1. 将业务逻辑从 Controller 移到 Case 层
+       2. 提高代码可测试性
+       3. 更好的职责分离
+   ```
+
+2. **创建 Case 层**
+   - 按照场景三的方式创建 Case 模块
+   - 将 Controller 中的业务逻辑移到 Case 层
+
+3. **简化 Trigger 层**
+   ```java
+   // 重构前
+   @RestController
+   public class XxxController {
+       @Resource private IDomain1Service d1;
+       @Resource private IDomain2Service d2;
+       @Resource private IDomain3Service d3;
+       
+       public Response process(Request req) {
+           // 100+ 行业务逻辑...
+       }
+   }
+   
+   // 重构后
+   @RestController
+   public class XxxController {
+       @Resource private I{Xxx}Case xxxCase;
+       
+       public Response process(Request req) {
+           xxxCase.execute(req);
+           return Response.success();
+       }
+   }
+   ```
+
+---
+
+### 完整开发流程示例
+
+**需求**：在拼团系统中添加"订单超时取消"功能
+
+**步骤 1：检查现有领域**
+```
+trade/
+├── adapter/repository/ITradeRepository.java  ← 可以复用
+├── model/entity/TradeLockRuleCommandEntity.java
+└── service/
+    ├── lock/TradeLockOrderService.java     ← 部分相关
+    └── refund/TradeRefundOrderService.java  ← 退单逻辑可参考
+```
+
+**步骤 2：决策**
+- 现有领域（trade）已有相关服务
+- 需要扩展现有 Service
+- 不需要创建新领域
+
+**步骤 3：实现**
+
+```java
+// 1. 扩展 ITradeRepository
+public interface ITradeRepository {
+    // 现有方法...
+    
+    // 新增：查询超时未支付订单
+    List<MarketPayOrderEntity> queryTimeoutUnpaidOrders();
+    
+    // 新增：取消订单
+    void cancelOrder(String orderId);
+}
+
+// 2. 扩展 TradeLockOrderService
+public interface ITradeLockOrderService {
+    // 现有方法...
+    
+    // 新增：处理超时订单
+    void handleTimeoutOrders();
+}
+
+@Slf4j
+@Service
+public class TradeLockOrderService implements ITradeLockOrderService {
+    
+    @Resource
+    private ITradeRepository repository;
+    
+    @Override
+    public void handleTimeoutOrders() {
+        log.info("处理超时未支付订单");
+        
+        // 1. 查询超时订单
+        List<MarketPayOrderEntity> orders = repository.queryTimeoutUnpaidOrders();
+        
+        // 2. 遍历取消
+        for (MarketPayOrderEntity order : orders) {
+            repository.cancelOrder(order.getOrderId());
+        }
+    }
+}
+```
+
+**步骤 4：添加 Trigger**
+```java
+@Component
+public class OrderTimeoutJob {
+    
+    @Resource
+    private ITradeLockOrderService tradeLockOrderService;
+    
+    @Scheduled(cron = "0 */5 * * * ?")  // 每5分钟执行
+    public void execute() {
+        try {
+            tradeLockOrderService.handleTimeoutOrders();
+        } catch (Exception e) {
+            log.error("订单超时处理异常", e);
+        }
+    }
+}
+```
+
+---
+
+### 规范速查表
+
+| 场景 | 判断条件 | 实现位置 |
+|------|---------|----------|
+| 扩展现有服务 | 功能属于现有领域 | `domain/{domain}/service/` |
+| 创建新领域 | 全新业务领域 | 创建完整的 `domain/{new}/` 结构 |
+| 创建 Case 层 | 多领域协作、复杂业务 | `case/{domain}/{capability}/` |
+| Trigger 调用 | 轻量工程、简单业务 | `trigger/{domain}/controller/` |
+| 重构为 Case | Trigger 越来越复杂 | 询问用户后重构 |
+
+**核心原则**：
+1. **优先复用**：先检查现有领域是否能支持
+2. **单一职责**：新功能归到对应领域，不随意扩张
+3. **适度分层**：简单场景直接调用，复杂场景创建 Case
+4. **持续演进**：Trigger 复杂化时，询问用户是否重构
+
+---
+
 ## Quick Templates
 
 ### Aggregate 聚合对象
