@@ -349,35 +349,74 @@ public void processWithLock(String key) {
 }
 ```
 
+### 2.4 BitSet 用户画像
+
+使用 Redis 的 `RBitSet` 结构，通过用户 ID 转换的偏移量快速判断用户是否属于特定人群标签：
+
+```java
+/**
+ * 使用 BitSet 快速判断用户标签（节省内存且高效）
+ */
+@Override
+public boolean isTagCrowdRange(String tagId, String userId) {
+    RBitSet bitSet = redisService.getBitSet(tagId);
+    if (!bitSet.isExists()) {
+        return false;
+    }
+    // 将用户 ID 映射为 BitSet 的偏移量
+    return bitSet.get(redisService.getIndexFromUserId(userId));
+}
+```
+
 ---
 
 ## 三、Repository 实现
 
-### 3.1 基础 Repository
+### 3.1 基础 Repository 与 Cache-Aside 模式
 
 ```java
 /**
- * 基础 Repository - 提供通用能力
+ * 基础 Repository - 提供通用能力（包含 Cache-Aside 旁路缓存实现）
  */
 @Slf4j
 public abstract class AbstractRepository {
 
     @Resource
     protected IRedisService redisService;
+    
+    @Resource
+    protected DCCService dccService;
+
+    /**
+     * Cache-Aside 缓存回退模板方法
+     * 1. 查缓存，有则返回
+     * 2. 无缓存，查库
+     * 3. 写缓存，返回库结果
+     */
+    protected <T> T getFromCacheOrDb(String cacheKey, Supplier<T> dbFallback) {
+        // DCC 动态降级开关
+        if (dccService.isCacheOpenSwitch()) {
+            T cacheResult = redisService.getValue(cacheKey);
+            if (null != cacheResult) return cacheResult;
+            
+            T dbResult = dbFallback.get();
+            if (null == dbResult) return null;
+            
+            redisService.setValue(cacheKey, dbResult);
+            return dbResult;
+        } else {
+            log.warn("缓存降级 {}", cacheKey);
+            return dbFallback.get();
+        }
+    }
 
     /**
      * 通用分页查询
      */
     protected <T> Page<T> queryPage(PageQuery<T> query, BaseDao<T> dao) {
-        // 计算分页
         int offset = (query.getPage() - 1) * query.getSize();
-        
-        // 查询数据
         List<T> records = dao.queryByCondition(query, offset, query.getSize());
-        
-        // 查询总数
         long total = dao.countByCondition(query);
-        
         return Page.of(records, total, query.getPage(), query.getSize());
     }
 }
@@ -543,7 +582,49 @@ public MarketPayOrderEntity lockMarketPayOrder(...) {
 
 ## 五、外部服务适配
 
-### 5.1 外部 API 调用
+### 5.1 泛型 HTTP 网关 (Retrofit)
+**适用场景**：动态 URL、多变参数的外部接口调用（如 `ai-mcp-gateway`）。
+
+```java
+/**
+ * 基于 Retrofit 的通用 HTTP 网关接口
+ */
+public interface GenericHttpGateway {
+    @POST
+    Call<ResponseBody> post(
+            @Url String url,
+            @HeaderMap Map<String, Object> headers,
+            @Body RequestBody body
+    );
+
+    @GET
+    Call<ResponseBody> get(
+            @Url String url,
+            @HeaderMap Map<String, Object> headers,
+            @QueryMap Map<String, Object> queryParams
+    );
+}
+
+/**
+ * Port 实现类调用泛型网关
+ */
+@Slf4j
+@Service
+public class SessionPort implements ISessionPort {
+    @Resource
+    private GenericHttpGateway genericHttpGateway;
+
+    @Override
+    public String toolCall(String url, Map<String, Object> params) throws Exception {
+        RequestBody body = RequestBody.create(
+                MediaType.parse("application/json"), JSON.toJSONString(params));
+        Response<ResponseBody> response = genericHttpGateway.post(url, new HashMap<>(), body).execute();
+        return response.body().string();
+    }
+}
+```
+
+### 5.2 外部 API 调用 (RestTemplate)
 
 ```java
 /**

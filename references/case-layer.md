@@ -475,6 +475,99 @@ public class OrderCaseImpl implements IOrderCase {
 └─────────────┘
 ```
 
+## ai-mcp-gateway 真实案例 (策略树编排)
+
+`ai-mcp-gateway` 使用策略树（Strategy Tree）模式对复杂的会话生命周期进行了编排。以下是其核心流程的简化呈现：
+
+### 1. 节点设计
+
+```java
+// RootNode 路由节点
+@Slf4j
+@Service("mcpSessionRootNode")
+public class RootNode extends AbstractCaseSupport<String, DynamicContext, SessionEntity> {
+    @Resource(name = "mcpSessionVerifyNode")
+    private VerifyNode verifyNode;
+
+    @Override
+    protected SessionEntity doApply(String request, DynamicContext context) {
+        log.info("MCP会话创建-RootNode");
+        return router(request, context);
+    }
+
+    @Override
+    public StrategyHandler<String, DynamicContext, SessionEntity> get(String request, DynamicContext context) {
+        return verifyNode;
+    }
+}
+
+// VerifyNode 校验节点（协调 Domain Auth 服务）
+@Slf4j
+@Service("mcpSessionVerifyNode")
+public class VerifyNode extends AbstractCaseSupport<String, DynamicContext, SessionEntity> {
+    @Resource(name = "mcpSessionNode")
+    private SessionNode sessionNode;
+    @Resource
+    private IAuthLicenseService authLicenseService;
+
+    @Override
+    protected SessionEntity doApply(String request, DynamicContext context) {
+        log.info("MCP会话创建-VerifyNode 鉴权");
+        authLicenseService.verify(request);
+        return router(request, context);
+    }
+
+    @Override
+    public StrategyHandler<String, DynamicContext, SessionEntity> get(String request, DynamicContext context) {
+        return sessionNode;
+    }
+}
+
+// SessionNode 会话节点（协调 Domain Session 服务）
+@Slf4j
+@Service("mcpSessionNode")
+public class SessionNode extends AbstractCaseSupport<String, DynamicContext, SessionEntity> {
+    @Resource(name = "mcpSessionEndNode")
+    private EndNode endNode;
+    @Resource
+    private ISessionManagementService sessionManagementService;
+
+    @Override
+    protected SessionEntity doApply(String request, DynamicContext context) {
+        log.info("MCP会话创建-SessionNode 创建会话");
+        SessionEntity session = sessionManagementService.createSession(request);
+        context.setSessionEntity(session);
+        return router(request, context);
+    }
+
+    @Override
+    public StrategyHandler<String, DynamicContext, SessionEntity> get(String request, DynamicContext context) {
+        return endNode;
+    }
+}
+```
+
+### 2. Case 服务调用
+
+```java
+@Service
+public class McpSessionService implements IMcpSessionService {
+    @Resource
+    private DefaultMcpSessionFactory factory;
+
+    @Override
+    public SessionEntity createSession(String request) {
+        StrategyHandler<String, DynamicContext, SessionEntity> handler = factory.strategyHandler();
+        try {
+            return handler.apply(request, new DynamicContext());
+        } catch (Exception e) {
+            log.error("创建会话失败", e);
+            throw new RuntimeException(e);
+        }
+    }
+}
+```
+
 ## 设计要点
 
 ### 1. Trigger 极简原则

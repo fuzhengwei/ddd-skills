@@ -1,7 +1,7 @@
 ---
-name: xfg-ddd-skills
+name: "xfg-ddd-skills"
+description: "DDD 六边形架构设计与部署技能包。提供 Domain/Case/Infrastructure 层设计模式与代码模板，以及 Docker 环境部署脚本。当用户询问 DDD 架构、设计模式或需要部署项目时调用。"
 version: 2.2.0
-description: "DDD 六边形架构设计与开发技能包。包含：领域层设计（Aggregate/Entity/CommandEntity/ValueObject/EnumVO）、Domain Service（策略模式/责任链模式/模板方法）、Repository、Port适配器、Case编排层、Trigger触发层、Infrastructure基础设施层。DevOps 部署支持：Dockerfile 打包、docker-compose 环境部署（MySQL/Redis/RabbitMQ）、应用启动停止脚本、阿里云镜像加速。参考 ai-mcp-gateway 真实工程规范。触发词：'DDD'、'六边形架构'、'部署'、'deploy'、'Docker'、'发布'、'上线'、'创建 DDD 项目'。不要用于简单 CRUD 应用或没有领域复杂度的微服务。@小傅哥"
 author: xiaofuge
 license: MIT
 triggers:

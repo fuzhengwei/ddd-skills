@@ -385,6 +385,35 @@ public class TradeRefundOrderService implements ITradeRefundOrderService {
 }
 ```
 
+### ai-mcp-gateway 真实案例：协议解析策略
+
+除了退单场景，在 `ai-mcp-gateway` 中也使用了策略模式来处理不同类型的协议参数解析：
+
+```java
+// 策略接口
+public interface IProtocolAnalysisStrategy {
+    void analysis(String protocol, Map<String, Object> params);
+}
+
+// 策略实现 A：Query 参数解析
+@Service("parametersAnalysisStrategy")
+public class ParametersAnalysisStrategy implements IProtocolAnalysisStrategy {
+    @Override
+    public void analysis(String protocol, Map<String, Object> params) {
+        // ...
+    }
+}
+
+// 策略实现 B：Body 参数解析
+@Service("requestBodyAnalysisStrategy")
+public class RequestBodyAnalysisStrategy implements IProtocolAnalysisStrategy {
+    @Override
+    public void analysis(String protocol, Map<String, Object> params) {
+        // ...
+    }
+}
+```
+
 ---
 
 ## 模式三：责任链模式（Chain Pattern）
