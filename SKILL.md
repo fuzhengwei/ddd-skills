@@ -103,18 +103,18 @@ AI：确认在 /Users/xxx/projects 下创建项目，开始执行...
    | ArtifactId | 项目模块唯一标识名称 | `your-project-name` | `order-system` |
    | Version | 项目版本号 | `1.0.0-SNAPSHOT` | `1.0.0-RELEASE` |
    | Package | Java 代码根包名 | 自动从 GroupId + ArtifactId 推导 | `cn.bugstack.order` |
-   | Archetype 版本 | 脚手架模板版本 | `1.3` | - |
+   | Archetype 版本 | 脚手架模板版本 | `1.8` | - |
 
 3. **第三步：确认并生成**
 
    显示所有配置，确认后执行 Maven Archetype 生成项目。
 
-**脚本执行方式**（在 `ddd-skills-v2` 项目根目录下运行）:
+**脚本执行方式**（在 `xfg-ddd-skills` 项目根目录下运行）:
 ```bash
 bash scripts/create-ddd-project.sh
 ```
 
-> ⚠️ **必须先 cd 到 `ddd-skills-v2` 项目目录下再执行**，脚本会自动定位自身路径。
+> ⚠️ **必须先 cd 到 `xfg-ddd-skills` 项目目录下再执行**，脚本会自动定位自身路径。
 > AI 负责引导用户选择目录、填写参数，无需手动拼凑 Maven 命令。
 > **⚠️ 再次强调：创建项目前必须询问用户项目创建地址，不能随意创建！**
 

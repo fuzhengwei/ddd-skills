@@ -21,7 +21,7 @@ DEFAULT_GROUP_ID="com.yourcompany"
 DEFAULT_ARTIFACT_ID="your-project-name"
 DEFAULT_VERSION="1.0.0-SNAPSHOT"
 DEFAULT_PACKAGE="com.yourcompany.project"
-DEFAULT_ARCHETYPE_VERSION="1.3"
+DEFAULT_ARCHETYPE_VERSION="1.8"
 ARCHETYPE_REPOSITORY="https://maven.xiaofuge.cn/"
 
 # ============================================================
@@ -343,7 +343,7 @@ run_maven_generate() {
 
     mvn archetype:generate \
         -DarchetypeGroupId=io.github.fuzhengwei \
-        -DarchetypeArtifactId=ddd-scaffold-lite-jdk17 \
+        -DarchetypeArtifactId=ddd-scaffold-std-jdk17 \
         -DarchetypeVersion="$ARCHETYPE_VERSION" \
         -DarchetypeRepository="$ARCHETYPE_REPOSITORY" \
         -DgroupId="$GROUP_ID" \
