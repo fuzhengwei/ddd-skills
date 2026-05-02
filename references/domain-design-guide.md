@@ -626,7 +626,9 @@ public class ParamValidateFilter implements IScenarioRuleFilter {
 | 多种能力类型用 if-else 判断 | `CapabilityApprovalServiceImpl` | 策略模式 `IApprovalCapabilityStrategy` |
 | 业务校验写在 Infrastructure 层 | `GitCodeScenarioExecutor` | 校验移到 Domain 层过滤器 |
 | capability 域直接依赖 form 域 Repository | `CapabilityApprovalServiceImpl` | 通过 Case 层编排，或合并 Repository 接口 |
-| `persistent/repository/` 包名错误 | Infrastructure 层 | 改为 `adapter/repository/` |
+| `persistent/repository/` 包名错误 | Infrastructure 层 | **严禁！** 改为 `adapter/repository/`，`persistent` 包不存在 |
+| `persistent/dao/` 包名错误 | Infrastructure 层 | **严禁！** 改为 `dao/` |
+| `persistent/po/` 包名错误 | Infrastructure 层 | **严禁！** 改为 `dao/po/` |
 | `scenario/dao/` 包名错误 | Infrastructure 层 | 改为 `dao/` |
 
 ### 重构后的目录结构

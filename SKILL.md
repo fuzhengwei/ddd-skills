@@ -1,7 +1,7 @@
 ---
 name: "xfg-ddd-skills"
 description: "DDD 六边形架构设计与部署技能包。提供 Domain/Case/Infrastructure 层设计模式与代码模板，以及 Docker 环境部署脚本。当用户询问 DDD 架构、设计模式或需要部署项目时调用。"
-version: 2.2.3
+version: 2.2.4
 author: xiaofuge
 license: MIT
 triggers:
@@ -173,6 +173,76 @@ bash scripts/create-ddd-project.sh
 
 **Dependency Rule**: `Trigger → API → Case → Domain ← Infrastructure`
 
+---
+
+## 🚨 Infrastructure 层强制约束（AI 必读）
+
+> **在生成 Infrastructure 层代码前，AI 必须严格遵守以下结构规范。违反任何一条都是错误的。**
+
+### ✅ 唯一正确的 Infrastructure 层目录结构
+
+```
+{project}-infrastructure/src/main/java/
+└── cn/{company}/infrastructure/
+    ├── adapter/                        # 适配器实现（实现 Domain 层定义的接口）
+    │   ├── port/                       # Port 实现，调用 gateway/
+    │   │   └── {Xxx}Port.java
+    │   └── repository/                 # Repository 实现，调用 dao/ 和 redis/
+    │       └── {Xxx}Repository.java
+    ├── dao/                            # MyBatis DAO 接口 + PO 对象
+    │   ├── po/                         # PO 对象（数据库映射）
+    │   │   └── {Xxx}PO.java
+    │   └── I{Xxx}Dao.java             # DAO 接口
+    ├── redis/                          # Redis 操作封装
+    │   └── IRedisService.java / RedisService.java
+    ├── gateway/                        # HTTP/RPC 客户端
+    │   ├── dto/                        # 远程调用 DTO
+    │   │   ├── {Xxx}RequestDTO.java
+    │   │   └── {Xxx}ResponseDTO.java
+    │   └── {Xxx}GatewayService.java    # HTTP 服务客户端
+    └── config/                         # Spring 配置类（线程池、OkHttp 等）
+```
+
+### 🚫 严格禁止的错误目录和包名
+
+| 错误包名 | 错误示例 | 正确位置 |
+|---------|---------|---------|
+| `persistent/` | `infrastructure.persistent.repository.XxxRepository` | **❌ 禁止！** 应放在 `adapter/repository/` |
+| `persistent/repository/` | `infrastructure.persistent.repository.XxxRepository` | **❌ 禁止！** 应放在 `adapter/repository/` |
+| `persistent/dao/` | `infrastructure.persistent.dao.IXxxDao` | **❌ 禁止！** 应放在 `dao/` |
+| `persistent/po/` | `infrastructure.persistent.po.XxxPO` | **❌ 禁止！** 应放在 `dao/po/` |
+| `scenario/` | `infrastructure.scenario.XxxScenario` | **❌ 禁止！** DAO 操作只能放在 `dao/` |
+| `config/` 下放 Redis 操作 | `config.RedisConfig.setValue()` | **❌ 禁止！** Redis 操作放 `redis/` |
+
+### ⚠️ 关键规则速记
+
+1. **Repository 实现**：只放 `adapter/repository/`，不放 `persistent/`、`repository/`（根目录）
+2. **DAO 接口和 PO 对象**：只放 `dao/` 和 `dao/po/`，不放 `persistent/dao/`、`persistent/po/`
+3. **Redis 操作**：只放 `redis/`，不放 `config/`
+4. **Gateway 客户端**：只放 `gateway/`，不放 `adapter/gateway/`
+5. **永远不要创建 `persistent` 包** — 这个包名在本架构中不存在
+
+### ❌ 常见 AI 错误模式
+
+```java
+// ❌ 错误1：创建 persistent 包放 Repository
+infrastructure/persistent/repository/UserRepository.java
+// ✅ 正确：infrastructure/adapter/repository/UserRepository.java
+
+// ❌ 错误2：创建 persistent 包放 DAO 和 PO
+infrastructure/persistent/dao/IUserDao.java
+infrastructure/persistent/dao/po/UserPO.java
+// ✅ 正确：infrastructure/dao/IUserDao.java
+// ✅ 正确：infrastructure/dao/po/UserPO.java
+
+// ❌ 错误3：在 config 包下写 Redis 操作
+infrastructure/config/RedisConfig.java  // 内部包含 setValue() 等操作方法
+// ✅ 正确：Redis 操作放 infrastructure/redis/RedisService.java
+// ✅ 正确：config/ 只放 Bean 配置（如 RedisTemplate 的序列化配置）
+```
+
+---
+
 ## ⚠️ Domain 层设计自检清单
 
 在生成 Domain 层代码前，必须逐项检查：
@@ -194,8 +264,92 @@ bash scripts/create-ddd-project.sh
 
 **6. Infrastructure 包名是否正确？**
 → Repository 实现：`adapter/repository/`（❌ 不是 `persistent/repository/`）
-→ DAO 操作：`dao/`（❌ 不是 `scenario/dao/` 或其他包）
+→ DAO 操作：`dao/`（❌ 不是 `scenario/dao/`、`persistent/dao/` 或其他包）
+→ PO 对象：`dao/po/`（❌ 不是 `persistent/po/`、`persistent/dao/po/` 或其他包）
 → Redis 操作：`redis/`（❌ 不是 `config/`）
+→ ⚠️ **永远不要创建 `persistent` 包** — 这个包名在本架构中不存在，是严格禁止的
+
+**7. Domain 与 Infrastructure 的通信路径是否正确？**
+→ **唯一合法路径**：Domain 层 → `adapter/port/` 或 `adapter/repository/`（接口定义在 Domain，实现在 Infrastructure）
+→ ❌ Domain 层不允许直接依赖 `dao/`、`redis/`、`gateway/` 等基础设施包
+→ ❌ 不允许在 `adapter/` 之外新建包做跨层通信
+
+**8. Infrastructure 内部调用链是否正确？**
+→ `adapter/port/` 只能调用 `gateway/`（HTTP/RPC 客户端）
+→ `adapter/repository/` 只能调用 `dao/`（数据库）、`redis/`（缓存）
+→ ❌ `adapter/port/` 不允许直接调用 `dao/` 或 `redis/`
+→ ❌ `adapter/repository/` 不允许直接调用 `gateway/`
+→ ❌ 不允许在 `adapter/`、`dao/`、`redis/`、`gateway/`、`config/` 之外新增基础设施包
+
+---
+
+## ⚠️ Domain ↔ Infrastructure 通信铁律
+
+> **六边形架构的核心约束：Domain 层与 Infrastructure 层之间，只能通过 `adapter` 适配器进行通信，不允许任何绕行路径。**
+
+### 合法通信路径（✅ 唯一允许）
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                        Domain 层                                 │
+│                                                                  │
+│  domain/{domain}/adapter/                                        │
+│  ├── port/                                                       │
+│  │   └── I{Xxx}Port.java          ← 定义远程调用接口              │
+│  └── repository/                                                 │
+│      └── I{Xxx}Repository.java    ← 定义数据访问接口              │
+│                                                                  │
+│  domain/{domain}/service/                                        │
+│  └── {Xxx}ServiceImpl.java         ← 业务逻辑只依赖上面的接口     │
+└──────────────────────────┬───────────────────────────────────────┘
+                           │ 依赖倒置（Domain 定义接口）
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                    Infrastructure 层                              │
+│                                                                  │
+│  infrastructure/adapter/               ← ✅ 唯一合法的通信桥梁     │
+│  ├── port/{Xxx}Port.java               实现 IPort，调用 gateway/  │
+│  └── repository/{Xxx}Repository.java   实现 IRepository，调用     │
+│                                        dao/ 和 redis/            │
+│                                                                  │
+│  infrastructure/dao/                   ← 被 repository 调用       │
+│  infrastructure/redis/                 ← 被 repository 调用       │
+│  infrastructure/gateway/               ← 被 port 调用             │
+│  infrastructure/config/                ← Spring 配置，不参与通信   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Infrastructure 内部调用链（✅ 严格遵守）
+
+```
+adapter/port/ ──────调用──────→ gateway/ (HTTP/RPC 客户端)
+                                    └── gateway/dto/ (请求/响应DTO)
+
+adapter/repository/ ─调用──→ dao/ (MyBatis DAO + PO)
+                    ─调用──→ redis/ (Redis 操作封装)
+```
+
+### 🚫 严格禁止的违规行为
+
+| 违规行为 | 说明 | 后果 |
+|---------|------|------|
+| Domain 直接依赖 `dao/` | Domain Service 直接注入 `IXxxDao` | 违反依赖倒置，Domain 耦合 MyBatis |
+| Domain 直接依赖 `redis/` | Domain Service 直接注入 `RedisService` | 违反依赖倒置，Domain 耦合 Redis |
+| Domain 直接依赖 `gateway/` | Domain Service 直接注入 `XxxGateway` | 违反依赖倒置，Domain 耦合 HTTP |
+| `adapter/` 之外新建通信包 | 在 `infrastructure/` 下新建 `service/`、`handler/`、`manager/` 等包做跨层通信 | 破坏六边形架构边界 |
+| `adapter/port/` 直接调用 `dao/` | Port 实现中直接操作数据库 | 职责混乱，Port 应只负责远程调用 |
+| `adapter/repository/` 直接调用 `gateway/` | Repository 实现中直接发起 HTTP 请求 | 职责混乱，Repository 应只负责本地数据 |
+| 任意新增基础设施包 | 在 `adapter/`、`dao/`、`redis/`、`gateway/`、`config/` 之外新增包 | 破坏架构规范，不允许 |
+
+### 速记口诀
+
+```
+Domain 定接口，Infra 来实现
+通信只过 adapter，port 和 repository
+port 对 gateway，repository 对 dao + redis
+不绕行、不越权、不乱加包
+```
 
 ## Domain Layer 目录结构
 

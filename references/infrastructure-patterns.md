@@ -31,6 +31,10 @@ infrastructure/
 - PO 类必须以 `PO` 结尾：`GroupBuyOrderPO`，不能是 `GroupBuyOrder`
 - Redis 操作封装放在 `redis/` 包，不能放在 `config/` 包
 - Repository 实现放在 `adapter/repository/`，不能放在 `persistent/` 或其他包
+- **严禁使用 `persistent` 包**：`persistent/`、`persistent/repository/`、`persistent/dao/`、`persistent/po/` 等均不存在
+- **唯一正确位置**：Repository → `adapter/repository/`，DAO → `dao/`，PO → `dao/po/`
+- **严禁使用 `persistent` 包**：`persistent/`、`persistent/repository/`、`persistent/dao/`、`persistent/po/` 等均不存在
+- **唯一正确位置**：Repository → `adapter/repository/`，DAO → `dao/`，PO → `dao/po/`
 
 ---
 

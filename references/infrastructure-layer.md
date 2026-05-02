@@ -1,5 +1,15 @@
 # Infrastructure Layer - 基础设施层
 
+## 🚨 重要警告：禁止使用 `persistent` 包
+
+> **在生成 Infrastructure 层代码时，AI 必须严格遵守以下规则：**
+> 
+> ❌ **绝对禁止创建 `persistent/`、`persistent/repository/`、`persistent/dao/`、`persistent/po/` 等任何以 `persistent` 开头的包**
+> 
+> ❌ **这些包名在 DDD 六边形架构中不存在，使用它们是严重的架构违规**
+> 
+> ✅ **唯一正确的结构如下文所述，任何偏离都是错误的**
+
 ## 概述
 
 基础设施层（Infrastructure Layer）是 DDD 六边形架构的最底层，负责：
@@ -46,10 +56,12 @@
 | `config/` | Spring 配置类（线程池、OkHttp 等） | ❌ 禁止放 Redis 操作代码 |
 
 **❌ 严格禁止的错误包名：**
-- `persistent/` — 错误，Repository 实现必须放在 `adapter/repository/`
-- `scenario/` — 错误，DAO 操作必须放在 `dao/`，不能放在其他包
-- `persistent/repository/` — 错误，不存在此结构
-- `config/` 下放 Redis 操作 — 错误，Redis 操作放 `redis/`
+- `persistent/` — **严格禁止！** Repository 实现必须放在 `adapter/repository/`，DAO 必须放在 `dao/`，PO 必须放在 `dao/po/`
+- `persistent/repository/` — **严格禁止！** 不存在此结构，应为 `adapter/repository/`
+- `persistent/dao/` — **严格禁止！** 不存在此结构，应为 `dao/`
+- `persistent/dao/po/` — **严格禁止！** 不存在此结构，应为 `dao/po/`
+- `scenario/` — **严格禁止！** DAO 操作必须放在 `dao/`，不能放在其他包
+- `config/` 下放 Redis 操作 — **严格禁止！** Redis 操作放 `redis/`
 
 ## 目录职责
 

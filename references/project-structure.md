@@ -110,7 +110,9 @@
 - **dao 包**：包含 PO 对象和 DAO 接口类，直接操作数据库
 - **adapter/repository**：实现领域层定义的 Repository 接口，内部组合使用 dao、redis 等完成数据持久化
 - **adapter/port**：实现领域层定义的 Port 接口，内部调用 gateway 完成远程服务调用
-- **禁止**使用 `persistent` 包，Repository 实现必须放在 `adapter/repository` 下
+- **`persistent/` 包严格禁止**：不存在 `persistent/`、`persistent/repository/`、`persistent/dao/`、`persistent/po/` 等任何结构
+- **唯一正确位置**：Repository 实现 → `adapter/repository/`，DAO → `dao/`，PO → `dao/po/`
+- **Domain ↔ Infrastructure 通信唯一路径**：只通过 `adapter/`（port 和 repository），不允许绕行
 
 ## DAO 与 PO 规范
 
